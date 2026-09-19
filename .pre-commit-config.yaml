@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright (strict)
+        entry: uv run pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest (esclude gpu, llm)
+        entry: uv run pytest -m "not gpu and not llm"
+        language: system
+        types: [python]
+        pass_filenames: false

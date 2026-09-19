@@ -11,7 +11,7 @@ dependencies = [
 gpu = ["ultralytics>=8.3", "boxmot>=11", "open-clip-torch", "umap-learn", "torch"]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio", "ruff>=0.8", "pyright>=1.1.390", "polars"]
+dev = ["pytest>=8", "pytest-asyncio", "ruff>=0.8", "pyright>=1.1.390", "polars", "pre-commit>=4"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
