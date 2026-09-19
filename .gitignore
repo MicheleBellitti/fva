@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.ruff_cache/
+.hamilton_cache/
+node_modules/
+.next/
+data/
+*.pt
+*.parquet
+.vercel

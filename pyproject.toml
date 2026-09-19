@@ -1,0 +1,48 @@
+[project]
+name = "fva"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "fva-core", "fva-perception", "fva-derivation",
+  "fva-assistant", "fva-api", "fva-worker",
+]
+
+[project.optional-dependencies]
+gpu = ["ultralytics>=8.3", "boxmot>=11", "open-clip-torch", "umap-learn", "torch"]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio", "ruff>=0.8", "pyright>=1.1.390", "polars"]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+fva-core       = { workspace = true }
+fva-perception = { workspace = true }
+fva-derivation = { workspace = true }
+fva-assistant  = { workspace = true }
+fva-api        = { workspace = true }
+fva-worker     = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pyright]
+include = ["packages", "tools", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+# burr e hamilton espongono API pubbliche (when, with_actions, with_state,
+# config.when) parzialmente non tipizzate nei loro stessi stub: non è
+# qualcosa che il nostro codice possa correggere.
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUntypedFunctionDecorator = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "eval"]
+addopts = "-q"
+markers = ["gpu: richiede una GPU", "llm: chiama un provider LLM (costa)"]

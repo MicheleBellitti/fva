@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Football Video Assistant — progetto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#0B1512;--surface:#111D18;--surface2:#182720;--surface3:#1F3128;--line:#2A3F34;--line-soft:#1D2D25;--chalk:#EAF0EB;--ink:#C4D3C9;--muted:#8A9E92;--dim:#5C7266;--p:#E8B33C;--p-soft:rgba(232,179,60,.14);--s:#5AA9E6;--s-soft:rgba(90,169,230,.14);--ok:#5CB88A;--warn:#D9A441;--risk:#C4574A;--maxw:1180px;--read:66ch;--eo:cubic-bezier(.16,1,.3,1)}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ground);color:var(--chalk);font-family:'Barlow',system-ui,sans-serif;font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(var(--line-soft) 1px,transparent 1px),linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);background-size:48px 48px;opacity:.26;mask-image:radial-gradient(ellipse 70% 60% at 50% 0%,#000 30%,transparent 75%)}
+h1,h2,h3{font-family:'Barlow Condensed',sans-serif;font-weight:600;line-height:1.06;margin:0;letter-spacing:.004em}
+h1{font-size:clamp(2.6rem,5.6vw,4.2rem);letter-spacing:-.012em}h2{font-size:2.5rem;margin-bottom:.4rem}h3{font-size:1.5rem;margin:2.2rem 0 .6rem}
+h4{font-size:1.1rem;margin:1.2rem 0 .35rem;font-weight:600}
+p{margin:0 0 1rem;max-width:var(--read)}ul,ol{max-width:var(--read);padding-left:1.15rem;margin:0 0 1rem}li{margin-bottom:.35rem}
+a{color:var(--s)}
+code{font-family:'IBM Plex Mono',monospace;font-size:.85em;background:var(--surface2);padding:.1em .38em;border-radius:4px;color:#D0E0D5}
+pre{background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;padding:1rem 1.1rem;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:.8rem;line-height:1.6;margin:1rem 0}pre code{background:none;padding:0;font-size:inherit}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 1.75rem;position:relative;z-index:1}
+:focus-visible{outline:2px solid var(--s);outline-offset:2px;border-radius:4px}
+.bar{position:sticky;top:0;z-index:50;background:rgba(11,21,18,.86);backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid var(--line-soft)}
+.bar-in{max-width:var(--maxw);margin:0 auto;padding:.6rem 1.75rem;display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap}
+.mark{font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:.5rem;text-decoration:none;color:var(--chalk)}
+.mark span{color:var(--muted);font-weight:400}.mark i{width:8px;height:8px;border-radius:50%;background:var(--p);box-shadow:0 0 0 3px var(--p-soft)}
+nav{display:flex;gap:.1rem;flex:1;overflow-x:auto;scrollbar-width:none;position:relative}nav::-webkit-scrollbar{display:none}
+nav a{color:var(--muted);text-decoration:none;font-size:.83rem;padding:.32rem .55rem;border-radius:6px;white-space:nowrap;position:relative;z-index:1;transition:color .18s}
+nav a:hover,nav a.on{color:var(--chalk)}
+nav .ind{position:absolute;top:0;left:0;height:100%;width:0;background:var(--surface2);border-radius:6px;transition:left .3s var(--eo),width .3s var(--eo);z-index:0}
+.seg{display:inline-flex;background:var(--surface);border:1px solid var(--line-soft);border-radius:999px;padding:3px;position:relative;vertical-align:middle}
+.seg .pill{position:absolute;top:3px;bottom:3px;left:3px;width:0;border-radius:999px;background:var(--chalk);transition:left .28s var(--eo),width .28s var(--eo),background .28s}
+.seg.sp .pill{background:var(--p)}.seg.ss .pill{background:var(--s)}
+.seg button{background:none;border:0;color:var(--muted);font:inherit;font-size:.78rem;padding:.22rem .7rem;border-radius:999px;cursor:pointer;position:relative;z-index:1;transition:color .2s;white-space:nowrap}
+.seg button[aria-pressed="true"]{color:var(--ground);font-weight:600}
+[data-area]{transition:opacity .22s,filter .22s}
+body.f-p [data-area="s"],body.f-s [data-area="p"]{opacity:.16;filter:saturate(.3)}
+body.f-p [data-area="s"] *,body.f-s [data-area="p"] *{pointer-events:none}
+.route{display:none;padding:2.6rem 0 4rem}.route.on{display:block;animation:fadein .3s var(--eo)}
+@keyframes fadein{from{opacity:0;transform:translateY(8px)}}
+.sec-n{font-family:'IBM Plex Mono',monospace;font-size:.76rem;color:var(--dim)}
+.lead{font-size:1.06rem;color:var(--ink);max-width:var(--read)}
+.tag{display:inline-flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.1rem .55rem;border-radius:999px;border:1px solid;vertical-align:3px;font-weight:500}
+.tag.p{color:var(--p);border-color:rgba(232,179,60,.35);background:var(--p-soft)}.tag.s{color:var(--s);border-color:rgba(90,169,230,.35);background:var(--s-soft)}
+.tag.x{color:var(--muted);border-color:var(--line);background:var(--surface2)}
+.card{position:relative;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:1.2rem 1.4rem;margin:1rem 0;overflow:hidden;transition:border-color .25s}
+.card::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.05),transparent 45%)}
+.card:hover::before{opacity:1}.card:hover{border-color:var(--line)}
+.card.p{border-left:2px solid var(--p)}.card.s{border-left:2px solid var(--s)}
+.card h4{margin-top:0}.card>*{position:relative}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.note{border-left:2px solid var(--line);padding:.1rem 0 .1rem 1rem;color:var(--ink);margin:1.2rem 0;max-width:var(--read)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:.3rem 1rem;font-size:.9rem}.kv dt{color:var(--muted);white-space:nowrap}.kv dd{margin:0;color:var(--ink)}
+table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.88rem}th,td{text-align:left;padding:.55rem .65rem;border-bottom:1px solid var(--line-soft);vertical-align:top}th{color:var(--muted);font-weight:500;font-size:.78rem;border-bottom-color:var(--line)}
+.tabs{display:flex;gap:.2rem;border-bottom:1px solid var(--line);margin:1.2rem 0 0;flex-wrap:wrap;position:relative}
+.tab{background:none;border:0;color:var(--muted);font:inherit;font-size:.87rem;padding:.55rem .85rem;cursor:pointer;transition:color .2s;position:relative;z-index:1}
+.tab:hover,.tab[aria-selected="true"]{color:var(--chalk)}.tabs .tind{position:absolute;bottom:-1px;height:2px;background:var(--chalk);left:0;width:0;transition:left .3s var(--eo),width .3s var(--eo)}
+.tabpane{animation:fadein .3s var(--eo)}.tabpane[hidden]{display:none}
+.btn{background:var(--surface2);border:1px solid var(--line);color:var(--chalk);font:inherit;font-size:.78rem;padding:.35rem .8rem;border-radius:8px;cursor:pointer;transition:background .15s,border-color .15s}
+.btn:hover{background:var(--surface3)}.btn[aria-pressed="true"]{background:var(--chalk);color:var(--ground);border-color:var(--chalk)}
+.btn.sm{font-size:.72rem;padding:.22rem .6rem}
+input.txt{background:var(--surface);border:1px solid var(--line);color:var(--chalk);font:inherit;font-size:.85rem;padding:.4rem .7rem;border-radius:8px;outline:0}input.txt:focus{border-color:var(--muted)}
+input[type=date].txt{color-scheme:dark}
+.hub{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1.6rem 0}.hub a{text-decoration:none;color:inherit}.hub .card{margin:0;height:100%}
+.hub .n{font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--dim)}.hub h4{font-family:'Barlow Condensed',sans-serif;font-size:1.5rem;margin:.2rem 0 .3rem}.hub p{font-size:.9rem;color:var(--ink);margin:0}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:2.6rem;align-items:center;padding:1rem 0 2rem}.hero .sub{color:var(--muted);font-size:1.1rem;max-width:44ch;margin-top:1rem}
+.pitchbox{border-radius:14px;overflow:hidden;border:1px solid var(--line-soft);background:#0F1B16}.pitchbox svg{width:100%;height:auto;display:block}
+.pl{fill:none;stroke:#2A3F34;stroke-width:1.3}.pt{font-family:'Barlow Condensed',sans-serif;font-size:15px}
+.rings{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1rem 0}
+.ring{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:1rem;display:grid;grid-template-columns:96px 1fr;gap:1rem;align-items:center}
+.ring svg{width:96px;height:96px}.ring .rt{stroke:var(--surface3);fill:none;stroke-width:8}.ring .rf{fill:none;stroke-width:8;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset 1s var(--eo)}
+.ring .rn{font-family:'Barlow Condensed',sans-serif;font-size:24px;fill:var(--chalk);font-weight:600}.ring .rl{font-weight:600}.ring .rs{font-size:.8rem;color:var(--muted)}
+/* system map */
+.map{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:1rem;margin:1rem 0;overflow-x:auto}
+.map-top{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem}
+.map svg{width:1000px;max-width:none;display:block}
+.zone rect{fill:rgba(255,255,255,.015);stroke:var(--line-soft);stroke-dasharray:4 4;rx:10}
+.zone text{font-family:'IBM Plex Mono',monospace;font-size:10.5px;fill:var(--dim);letter-spacing:.04em}
+.mn{cursor:pointer}.mn rect{fill:var(--surface2);stroke:var(--line);stroke-width:1.2;transition:stroke .2s,fill .2s,opacity .2s}
+.mn text{font-family:'Barlow',sans-serif;font-size:12.5px;fill:var(--chalk);pointer-events:none;font-weight:500}.mn .sub{font-family:'IBM Plex Mono',monospace;font-size:9.5px;fill:var(--muted);font-weight:400}
+.mn.ap rect{stroke:rgba(232,179,60,.6)}.mn.as rect{stroke:rgba(90,169,230,.6)}.mn.ad rect{stroke:rgba(92,184,138,.55)}
+.mn:hover rect,.mn.sel rect{stroke:var(--chalk);fill:var(--surface3)}.mn.dim{opacity:.22}
+.me{fill:none;stroke:var(--line);stroke-width:1.4;transition:stroke .2s,opacity .2s}.me.w{marker-end:url(#mw)}.me.r{marker-end:url(#mr);stroke-dasharray:5 4}.me.x{marker-end:url(#mw);marker-start:url(#ms)}
+.me.hot{stroke:var(--chalk);stroke-width:2}.me.hot.r{marker-end:url(#mrh)}.me.hot.w,.me.hot.x{marker-end:url(#mwh)}.me.hot.x{marker-start:url(#msh)}.me.dim{opacity:.12}
+.ml{font-family:'IBM Plex Mono',monospace;font-size:9.5px;fill:var(--muted);pointer-events:none;transition:opacity .2s}.ml.dim{opacity:.1}.ml.hot{fill:var(--chalk)}
+.mlb{fill:var(--surface);opacity:.9}
+.mdet{background:var(--surface2);border:1px solid var(--line-soft);border-radius:10px;padding:.9rem 1.1rem;margin-top:.8rem;min-height:5rem;display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:1rem}
+.mdet h5{margin:0 0 .3rem;font-size:1rem;font-weight:600}.mdet p{margin:0;font-size:.88rem;color:var(--ink);max-width:none}
+.mdet .io b{display:block;font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--muted);font-weight:500;margin-bottom:.3rem;letter-spacing:.04em}
+.mdet .io span{display:block;font-size:.85rem;color:var(--ink);padding:.15rem 0;border-bottom:1px solid var(--line-soft)}
+.legend{display:flex;gap:1.2rem;font-size:.76rem;color:var(--muted);flex-wrap:wrap;align-items:center}
+.legend i{display:inline-block;width:22px;height:0;border-top:2px solid var(--line);margin-right:.4rem;vertical-align:middle}.legend i.r{border-top-style:dashed}
+/* schema */
+.schema{display:grid;grid-template-columns:220px 1fr;gap:1rem;margin:1.2rem 0}
+.schema .list button{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line-soft);color:var(--ink);font:inherit;font-family:'IBM Plex Mono',monospace;font-size:.8rem;padding:.5rem .75rem;border-radius:8px;margin-bottom:.35rem;cursor:pointer;transition:border-color .2s,background .2s}
+.schema .list button:hover{border-color:var(--line)}.schema .list button.on{background:var(--surface3);border-color:var(--chalk);color:var(--chalk)}
+.schema .det{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:1.1rem 1.3rem;min-height:14rem}
+.schema .det h4{margin-top:0;font-family:'IBM Plex Mono',monospace;font-weight:500}.schema .det .why{color:var(--muted);font-size:.9rem;margin-bottom:.6rem}
+.rw{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem}.rw span{font-size:.74rem;padding:.1rem .55rem;border-radius:999px;border:1px solid var(--line);color:var(--muted)}.rw span b{color:var(--chalk);font-weight:500}
+.col{display:grid;grid-template-columns:200px 110px 1fr;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--line-soft);font-size:.84rem}.col:last-child{border:0}
+.col .cn{font-family:'IBM Plex Mono',monospace;color:var(--chalk)}.col .ct{font-family:'IBM Plex Mono',monospace;color:var(--dim)}.col .cd{color:var(--ink)}
+.col.req .cn::after{content:" ●";color:var(--p);font-size:.6rem;vertical-align:2px}
+/* timeline */
+.tlbar{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin:1.2rem 0 .6rem;font-size:.86rem;color:var(--muted)}
+.gantt{display:grid;grid-template-columns:1fr;gap:.5rem;margin:.6rem 0 1rem}
+.gl{display:flex;gap:4px;height:44px}
+.gl button{flex:var(--w);background:var(--surface2);border:1px solid var(--line-soft);border-radius:8px;color:var(--muted);font:inherit;cursor:pointer;position:relative;overflow:hidden;text-align:left;padding:.4rem .7rem;transition:border-color .2s}
+.gl button::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line)}
+.gl button b{display:block;font-family:'Barlow Condensed',sans-serif;font-size:1.05rem;color:var(--chalk);font-weight:600;line-height:1.1}
+.gl button small{font-family:'IBM Plex Mono',monospace;font-size:.68rem}
+.gl button:hover,.gl button.on{border-color:var(--chalk)}.gl button.on{background:var(--surface3)}
+.wkrow{display:flex;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--dim)}.wkrow span{flex:var(--w);padding-left:.7rem}
+.msdet{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:1.2rem 1.4rem;margin:.8rem 0}
+.msdet .hd{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap}.msdet .hd h4{margin:0;font-family:'Barlow Condensed',sans-serif;font-size:1.6rem}
+.msdet .dates{font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--muted)}
+.bud{display:grid;grid-template-columns:110px 1fr 120px;gap:.8rem;align-items:center;font-size:.85rem;margin:.4rem 0}
+.bud .trk{height:10px;background:var(--surface2);border-radius:999px;overflow:hidden;position:relative}.bud .fil{height:100%;border-radius:999px;transition:width .6s var(--eo)}
+.bud .mk{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--chalk);opacity:.7}
+.bud .v{font-family:'IBM Plex Mono',monospace;font-size:.76rem;color:var(--muted);text-align:right}
+.bud .v.over{color:var(--risk)}
+.wkin{width:56px;text-align:center;font-family:'IBM Plex Mono',monospace}
+.done{border-left:2px solid var(--ok);padding-left:.9rem;margin-top:.8rem;font-size:.9rem;color:var(--ink)}.done b{color:var(--ok)}
+/* board */
+.tb-top{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:1rem 0}
+.tb-stats{display:flex;gap:1.6rem;flex-wrap:wrap;margin:.6rem 0 1rem;font-size:.85rem;color:var(--muted)}.tb-stats b{color:var(--chalk);font-family:'Barlow Condensed',sans-serif;font-size:1.4rem;font-weight:600;margin-right:.3rem}
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;align-items:start}
+.colm{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:.7rem;min-height:12rem;transition:border-color .2s,background .2s}
+.colm.over{border-color:var(--chalk);background:var(--surface2)}
+.colm h5{margin:.2rem .3rem .7rem;font-family:'IBM Plex Mono',monospace;font-size:.74rem;font-weight:500;color:var(--muted);letter-spacing:.05em;display:flex;justify-content:space-between}
+.tk{background:var(--surface2);border:1px solid var(--line-soft);border-radius:10px;padding:.65rem .8rem;margin-bottom:.55rem;cursor:grab;transition:border-color .15s,transform .15s,opacity .2s;position:relative}
+.tk:hover{border-color:var(--line)}.tk.drag{opacity:.4}.tk:active{cursor:grabbing}
+.tk .hd{display:flex;gap:.5rem;align-items:center;font-size:.72rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:.25rem}
+.tk .hd .ms{color:var(--dim)}.tk .hd .ex{color:var(--warn)}.tk .hd .sy{color:var(--ok)}.tk .hd .jt{color:var(--p)}
+.tk .t{font-weight:500;line-height:1.3}.tk .d{font-size:.82rem;color:var(--muted);margin-top:.25rem}
+.tk .ft{display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;gap:.5rem}
+.tk .hrs{font-family:'IBM Plex Mono',monospace;font-size:.74rem;color:var(--dim);cursor:text;border-bottom:1px dashed transparent}.tk .hrs:hover{border-color:var(--muted);color:var(--ink)}
+.tk .hrs input{width:44px;background:var(--surface);border:1px solid var(--line);color:var(--chalk);font:inherit;font-size:.74rem;padding:.1rem .3rem;border-radius:4px;text-align:center}
+.st{font-size:.7rem;padding:.12rem .55rem;border-radius:999px;border:1px solid var(--line);color:var(--muted);cursor:pointer;background:none;font-family:inherit}
+.st.doing{color:var(--warn);border-color:rgba(217,164,65,.4)}.st.done{color:var(--ok);border-color:rgba(92,184,138,.4)}
+.tk.p{border-left:2px solid var(--p)}.tk.s{border-left:2px solid var(--s)}
+.tk.done .t{color:var(--muted);text-decoration:line-through}
+.list .tk{cursor:default}.list .grp{font-family:'Barlow Condensed',sans-serif;font-size:1.3rem;margin:1.2rem 0 .5rem;display:flex;align-items:center;gap:.8rem}.list .grp small{font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--muted)}
+.empty{color:var(--dim);font-size:.85rem;padding:1rem .3rem;text-align:center}
+/* adr, prereq */
+.adr{display:grid;grid-template-columns:5.2rem 1fr;gap:.8rem;padding:.7rem 0;border-bottom:1px solid var(--line-soft)}.adr .n{font-family:'IBM Plex Mono',monospace;font-size:.76rem;color:var(--muted);padding-top:.15rem}
+.adr b{display:block}.adr span{color:var(--ink);font-size:.9rem}.adr.open .n{color:var(--warn)}.adr.open b::after{content:"  · da decidere a voce";color:var(--warn);font-weight:400;font-size:.8rem}
+.pre{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:1rem 0}
+.pre button{text-align:left;background:var(--surface);border:1px solid var(--line-soft);border-radius:10px;padding:.7rem .9rem;color:var(--ink);font:inherit;font-size:.9rem;cursor:pointer;display:flex;gap:.7rem;align-items:flex-start;transition:border-color .2s}
+.pre button:hover{border-color:var(--line)}.pre button i{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);flex:none;margin-top:.15rem;display:grid;place-items:center;font-style:normal;font-size:11px;color:var(--ground);transition:background .2s,border-color .2s}
+.pre button.on i{background:var(--ok);border-color:var(--ok)}.pre button.on{color:var(--muted)}
+footer{padding:2rem 0 3rem;color:var(--muted);font-size:.86rem;border-top:1px solid var(--line-soft)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+@media (max-width:900px){.hero,.cols,.cols3,.schema,.pre,.mdet,.rings{grid-template-columns:1fr}.hub{grid-template-columns:1fr 1fr}.board{grid-template-columns:1fr}h2{font-size:2rem}nav{order:3;width:100%;flex:none}.bud{grid-template-columns:90px 1fr 90px}}
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in">
+  <a class="mark" href="#/"><i></i>Football Video Assistant <span>/ progetto</span></a>
+  <nav id="nav"><span class="ind"></span>
+    <a href="#/" data-r="home">Home</a><a href="#/architettura" data-r="architettura">Architettura</a><a href="#/dati" data-r="dati">Modelli dati</a><a href="#/milestone" data-r="milestone">Milestone</a><a href="#/lavoro" data-r="lavoro">Lavoro</a><a href="#/decisioni" data-r="decisioni">Decisioni</a>
+  </nav>
+  <div class="seg" id="seg"><span class="pill"></span><button data-f="all" aria-pressed="true">Tutto</button><button data-f="p">Percezione</button><button data-f="s">Assistente</button></div>
+</div></div>
+
+<main>
+
+<!-- HOME -->
+<section class="route" data-route="home"><div class="wrap">
+  <div class="hero">
+    <div><h1>Due sistemi,<br>un contratto,<br>venti settimane</h1>
+      <p class="sub">Un sistema che guarda una partita, ne ricava una timeline strutturata, e risponde a domande in italiano portandoti al secondo esatto. Due aree di lavoro indipendenti, un solo schema in mezzo.</p></div>
+    <div class="pitchbox"><svg viewBox="0 0 420 270" role="img" aria-label="Il campo diviso nelle due aree">
+      <rect width="420" height="270" fill="#0F1B16"/><g class="pl"><rect x="20" y="20" width="380" height="230"/><line x1="210" y1="20" x2="210" y2="250"/><circle cx="210" cy="135" r="40"/><rect x="20" y="78" width="52" height="114"/><rect x="348" y="78" width="52" height="114"/></g><g id="dots"></g>
+      <text class="pt" x="44" y="46" fill="var(--p)">PERCEZIONE</text><text class="pt" x="44" y="63" fill="#6C8175" style="font-size:11px">Hamilton · Polars · GPU</text>
+      <text class="pt" x="376" y="46" fill="var(--s)" text-anchor="end">ASSISTENTE</text><text class="pt" x="376" y="63" fill="#6C8175" text-anchor="end" style="font-size:11px">Burr · FastAPI · Next.js</text>
+      <text class="pt" x="210" y="238" fill="#6C8175" text-anchor="middle" style="font-size:11px">docs/schema.md</text></svg></div>
+  </div>
+  <div class="hub">
+    <a href="#/architettura"><div class="card"><div class="n">01</div><h4>Architettura</h4><p>Mappa di sistema: cosa gira dove, chi legge e chi scrive cosa.</p></div></a>
+    <a href="#/dati"><div class="card"><div class="n">02</div><h4>Modelli dati</h4><p>Il contratto: tabelle con lettori e scrittori, Parquet, enum, DSL.</p></div></a>
+    <a href="#/milestone"><div class="card"><div class="n">03</div><h4>Milestone</h4><p>Timeline con date, budget di ore contro stima, definition of done.</p></div></a>
+    <a href="#/lavoro"><div class="card"><div class="n">04</div><h4>Lavoro</h4><p>Board dei task per area, trascinabile, con ore modificabili.</p></div></a>
+    <a href="#/decisioni"><div class="card"><div class="n">05</div><h4>Decisioni</h4><p>ADR, prerequisiti, convenzioni di repo.</p></div></a>
+    <a href="#/architettura"><div class="card"><div class="n">06</div><h4>Sincronizzazione</h4><p>PR su <code>core/</code> con due reviewer; review di 90' a fine milestone; tre righe a settimana in <code>STATUS.md</code>.</p></div></a>
+  </div>
+  <h3>Stato del lavoro</h3>
+  <p class="lead">Calcolato dalla board. Le spunte vivono nel browser di chi le mette.</p>
+  <div class="rings" id="home-rings"></div>
+</div></section>
+
+<!-- ARCHITETTURA -->
+<section class="route" data-route="architettura"><div class="wrap">
+  <div class="sec-n">01</div><h2>Architettura</h2>
+  <p class="lead">Come si legano le parti. Clicca un componente per vedere cosa legge e cosa scrive; passa a <em>produzione</em> per vedere cosa cambia. Le frecce tratteggiate sono letture, quelle piene scritture.</p>
+  <div class="map">
+    <div class="map-top">
+      <div class="legend"><span><i></i>scrive</span><span><i class="r"></i>legge</span><span style="color:var(--p)">▮ percezione</span><span style="color:var(--s)">▮ assistente</span><span style="color:var(--ok)">▮ dato</span></div>
+      <div class="seg" id="modeseg"><span class="pill"></span><button data-m="dev" aria-pressed="true">Sviluppo</button><button data-m="prod">Produzione</button></div>
+    </div>
+    <svg viewBox="0 0 1000 470" id="sysmap">
+      <defs>
+        <marker id="mw" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2A3F34"/></marker>
+        <marker id="mr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2A3F34"/></marker>
+        <marker id="ms" viewBox="0 0 8 8" refX="1" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M8 0 L0 4 L8 8 z" fill="#2A3F34"/></marker>
+        <marker id="mwh" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#EAF0EB"/></marker>
+        <marker id="mrh" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#EAF0EB"/></marker>
+        <marker id="msh" viewBox="0 0 8 8" refX="1" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M8 0 L0 4 L8 8 z" fill="#EAF0EB"/></marker>
+      </defs>
+      <g id="zones"></g><g id="edges"></g><g id="elabels"></g><g id="nodes"></g>
+    </svg>
+    <div class="mdet" id="mdet"><div><h5>Clicca un componente</h5><p>Ogni componente mostra da chi legge e su chi scrive. Le zone tratteggiate sono i confini di deployment.</p></div><div class="io"></div><div class="io"></div></div>
+  </div>
+
+  <h3>Le tre cose da capire della mappa</h3>
+  <div class="cols3">
+    <div class="card p"><h4>Il worker GPU è un servizio condiviso</h4><p style="font-size:.9rem;margin:0">Gira sull'host della macchina con la scheda, fuori da Docker, e consuma una coda in Postgres. <strong>Chiunque</strong> può mettere una partita in coda: chi lavora sull'assistente non ha bisogno della GPU sul proprio computer, gli basta il bucket condiviso per leggere i risultati.</p></div>
+    <div class="card"><h4>Due sistemi, un contratto, nessuna chiamata diretta</h4><p style="font-size:.9rem;margin:0">Il worker non parla con l'API e l'API non parla con il worker. Comunicano solo attraverso Postgres e il bucket. È ciò che rende le due aree sviluppabili in autonomia — e testabili con dati sintetici.</p></div>
+    <div class="card s"><h4>L'API non ha GPU e non ne avrà</h4><p style="font-size:.9rem;margin:0">A runtime l'assistente fa una query SQL e due chiamate a un provider LLM. Tutto il lavoro pesante è già stato fatto dal worker. Per questo in produzione l'API scala a zero su un container serverless.</p></div>
+  </div>
+
+  <h3>Stack</h3>
+  <div class="tabs" role="tablist"><span class="tind"></span><button class="tab" role="tab" aria-selected="true" data-pane="st1">Comune</button><button class="tab" role="tab" data-pane="st2">Percezione</button><button class="tab" role="tab" data-pane="st3">Assistente</button></div>
+  <div class="tabpane" id="st1"><table><tbody><tr><td>Python 3.12 · <code>uv</code> workspace</td><td>monorepo, lockfile unico</td></tr><tr><td><strong>Polars</strong></td><td>lazy, pushdown su Parquet, <code>join_asof</code>, <code>over()</code>. Pandas solo dove una libreria lo impone</td></tr><tr><td>Pydantic v2</td><td>modelli, config, DSL. <code>extra="forbid"</code></td></tr><tr><td>SQLAlchemy 2 core · Alembic · psycopg 3</td><td>accesso dati e migrazioni</td></tr><tr><td>ruff · pyright strict · pytest</td><td>in CI, bloccanti</td></tr></tbody></table></div>
+  <div class="tabpane" id="st2" hidden><table><tbody><tr><td><strong>Hamilton</strong> + <code>h_polars</code></td><td>DAG dichiarativo, caching, <code>@config.when</code>, <code>@check_output</code></td></tr><tr><td>PyAV · ffmpeg</td><td>decodifica in streaming · transcodifica e HLS</td></tr><tr><td>Ultralytics YOLO11m @1280</td><td>4 classi, fine-tuned su Kaggle</td></tr><tr><td><code>supervision</code></td><td>slicer per la palla, formato Detections</td></tr><tr><td><code>boxmot</code> BoT-SORT</td><td>tracking con compensazione del movimento di camera</td></tr><tr><td>SigLIP · umap-learn · scikit-learn</td><td>assegnazione squadre</td></tr><tr><td>Modello keypoint campo + OpenCV</td><td>omografia RANSAC</td></tr><tr><td>VLM via API → LightGBM</td><td>inquadrature, M1 → M2</td></tr></tbody></table></div>
+  <div class="tabpane" id="st3" hidden><table><tbody><tr><td><strong>Apache Burr</strong></td><td>macchina a stati, persistenza Postgres, replay, UI</td></tr><tr><td>Astrazione LLM propria</td><td><code>structured()</code> e <code>stream()</code>, 3 provider, routing per nodo</td></tr><tr><td>DSL Pydantic → compilatore SQL</td><td>mai SQL dall'LLM</td></tr><tr><td>pgvector</td><td>momenti simili</td></tr><tr><td>FastAPI + sse-starlette</td><td>streaming</td></tr><tr><td>Next.js 15 · hls.js</td><td>player con seek, chat, timeline</td></tr><tr><td>Langfuse via OpenTelemetry</td><td>solo da M3</td></tr></tbody></table></div>
+
+  <h3>Observability</h3>
+  <table><thead><tr><th></th><th>M0–M2</th><th>M3+</th></tr></thead><tbody>
+    <tr data-area="p"><td>Percezione</td><td>tabella <code>pipeline_runs</code>: tempo, righe, esito dei check per nodo. Adapter Hamilton di ~30 righe</td><td>Hamilton UI solo se i log non bastano</td></tr>
+    <tr data-area="s"><td>Assistente</td><td><strong>solo Burr UI</strong>: transizioni, input/output, replay</td><td>+ Langfuse via OpenTelemetry da Burr: costi, prompt versionati, dataset di eval</td></tr></tbody></table>
+</div></section>
+
+<!-- DATI -->
+<section class="route" data-route="dati"><div class="wrap">
+  <div class="sec-n">02</div><h2>Modelli dati</h2>
+  <p class="lead">Il contratto. Per ogni tabella: chi la scrive, chi la legge, i campi. Il pallino <span style="color:var(--p)">●</span> segna i campi non negoziabili.</p>
+  <h3>Postgres</h3>
+  <div class="schema"><div class="list" id="tlist"></div><div class="det" id="tdet"></div></div>
+  <h3>Parquet · <code>tracks</code></h3>
+  <div class="cols"><div><pre><code>tracks/match_id=&lt;id&gt;/pipeline_version=&lt;sha&gt;/part-N.parquet
+
+frame        u32
+t_video      f32   secondi dall'inizio del file
+half         u8
+match_clock  f32   secondi dal kickoff del tempo
+track_id     u32   NON è un giocatore: cambia alle uscite
+cls          u8    Cls enum
+team         u8    Team enum
+x_img y_img  f32   pixel, frame 1080p
+x_pitch      f32   metri, orientamento normalizzato
+y_pitch      f32
+conf         f32
+h_ok         bool  omografia accettata</code></pre></div>
+  <div><div class="card p"><h4>Scritto dal worker, letto dalla derivazione e dalle viste</h4><p style="font-size:.9rem;margin:0">~800k righe per partita. Non va in Postgres: Polars lazy su Parquet partizionato legge 60 MB in 200 ms, e non serve mai interrogare il tracking per riga singola.</p></div>
+  <div class="card"><h4>Immutabile per versione</h4><p style="font-size:.9rem;margin:0">Una nuova <code>pipeline_version</code> scrive una nuova partizione. I vecchi risultati restano e si confrontano.</p></div></div></div>
+  <h3>Enum e convenzioni</h3>
+  <div class="cols"><div><pre><code># packages/core/models/enums.py
+class Cls(IntEnum):
+    PLAYER = 0; GOALKEEPER = 1; REFEREE = 2; BALL = 3
+
+class Team(IntEnum):
+    A = 0; B = 1; NA = 255        # A = squadra analizzata
+
+class ViewType(StrEnum):
+    TACTICAL = "tactical"; REPLAY = "replay"
+    CLOSEUP = "closeup"; CROWD = "crowd"; GRAPHIC = "graphic"
+
+class EventStatus(StrEnum):
+    PROVISIONAL = "provisional"; CONFIRMED = "confirmed"
+    RETRACTED = "retracted"      # M0–M3: sempre confirmed</code></pre>
+  <pre><code># Coordinate campo
+PITCH_L, PITCH_W = 105.0, 68.0
+# origine in basso a sinistra; la squadra A attacca SEMPRE verso +x
+# in entrambi i tempi. La normalizzazione avviene in pitch_tracks
+# usando team_orientation(match, team, half).attack_direction</code></pre></div>
+  <div class="pitchbox"><svg viewBox="0 0 420 300"><rect width="420" height="300" fill="#0F1B16"/><g class="pl"><rect x="40" y="40" width="340" height="220"/><line x1="210" y1="40" x2="210" y2="260"/><circle cx="210" cy="150" r="36"/><rect x="40" y="92" width="48" height="116"/><rect x="332" y="92" width="48" height="116"/></g>
+    <line x1="40" y1="260" x2="120" y2="260" stroke="var(--p)" stroke-width="2"/><polygon points="120,255 130,260 120,265" fill="var(--p)"/><text x="60" y="280" fill="var(--p)" class="pt" style="font-size:12px">x → 105 m</text>
+    <line x1="40" y1="260" x2="40" y2="180" stroke="var(--p)" stroke-width="2"/><polygon points="35,180 40,170 45,180" fill="var(--p)"/><text x="48" y="175" fill="var(--p)" class="pt" style="font-size:12px">y ↑ 68 m</text>
+    <circle cx="40" cy="260" r="3.5" fill="var(--p)"/><text x="20" y="284" fill="var(--muted)" class="pt" style="font-size:11px">(0,0)</text>
+    <text x="300" y="150" fill="var(--p)" class="pt" text-anchor="middle" style="font-size:14px">A attacca →</text><text x="120" y="150" fill="var(--s)" class="pt" text-anchor="middle" style="font-size:14px">← B attacca</text>
+    <text x="210" y="28" fill="var(--muted)" class="pt" text-anchor="middle" style="font-size:11px">sistema normalizzato · vale per entrambi i tempi</text></svg></div></div>
+  <h3 data-area="s">DSL di query <span class="tag s">assistente</span></h3>
+  <div data-area="s"><p>L'LLM sceglie tra opzioni chiuse, non scrive. <code>EventType</code> e <code>MetricName</code> sono generati dai registry: un detector nuovo è visibile all'assistente senza toccare altro.</p>
+  <div class="tabs" role="tablist"><span class="tind"></span><button class="tab" role="tab" aria-selected="true" data-pane="q1">Modelli</button><button class="tab" role="tab" data-pane="q2">Compilatore</button><button class="tab" role="tab" data-pane="q3">Risposta</button></div>
+  <div class="tabpane" id="q1"><pre><code>EventType  = Literal[tuple(sorted(DETECTORS))]        # dal registry
+MetricName = Literal[tuple(sorted(METRICS))]
+Zone = Literal["defensive_third","middle_third","final_third",
+               "left_flank","center","right_flank","box"]
+
+class TimeWindow(BaseModel):
+    half: Literal[1, 2] | None = None
+    clock_from_min: int | None = Field(None, ge=0, le=130)
+    clock_to_min:   int | None = Field(None, ge=0, le=130)
+    last_n_min:     int | None = Field(None, ge=1, le=90)
+    model_config = {"extra": "forbid"}
+
+class FindMoments(BaseModel):
+    intent: Literal["find_moments"]
+    match_ids: list[str] = Field(min_length=1)
+    event_types: list[EventType] = Field(min_length=1)
+    team: Literal["A", "B", "both"] = "both"
+    zone: Zone | None = None
+    time: TimeWindow | None = None
+    min_confidence: float = Field(0.5, ge=0, le=1)
+    limit: int = Field(20, le=100)
+    model_config = {"extra": "forbid"}
+
+class ComputeMetric(BaseModel):
+    intent: Literal["compute_metric"]; match_ids: list[str]
+    metric: MetricName; team: Literal["A", "B"]
+    time: TimeWindow | None = None
+    group_by: Literal["match", "half", "window"] = "match"
+
+class CompareMatches(BaseModel):
+    intent: Literal["compare"]; match_ids: list[str] = Field(min_length=2)
+    metric: MetricName; team: Literal["A", "B"]
+
+class SimilarMoments(BaseModel):
+    intent: Literal["similar"]; anchor_event_id: str
+    match_ids: list[str] | None = None; limit: int = 10
+
+Query = Annotated[Union[FindMoments, ComputeMetric, CompareMatches,
+                        SimilarMoments], Field(discriminator="intent")]</code></pre></div>
+  <div class="tabpane" id="q2" hidden><pre><code>def compile_find_moments(q: FindMoments) -> tuple[str, dict]:
+    sql = """SELECT id, match_id, type, team, t_video, half, match_clock,
+                    x_pitch, y_pitch, confidence
+             FROM events
+             WHERE match_id = ANY(:match_ids) AND type = ANY(:types)
+               AND confidence >= :minc AND status <> 'retracted'"""
+    params = {"match_ids": q.match_ids, "types": q.event_types,
+              "minc": q.min_confidence}
+    if q.team != "both":
+        sql += " AND team = :team"; params["team"] = int(Team[q.team])
+    if q.zone:
+        sql += f" AND {ZONE_PREDICATES[q.zone]}"   # predicati fissi
+    if q.time:
+        sql, params = apply_time_window(sql, params, q.time)
+    sql += " ORDER BY t_video LIMIT :limit"; params["limit"] = q.limit
+    return sql, params
+
+# la sintassi è nel compilatore, i valori sono bindati,
+# i vocabolari sono Literal: un evento inesistente è un errore Pydantic</code></pre></div>
+  <div class="tabpane" id="q3" hidden><pre><code>class ClipRef(BaseModel):
+    event_id: str; match_id: str
+    t_video: float            # dove salta il player
+    t_end: float | None
+    match_clock: str          # "52'18\"" per la UI
+    type: EventType; confidence: float
+
+class AnswerPayload(BaseModel):
+    text: str                 # markdown con [evt_xxx] inline → chip
+    clips: list[ClipRef]
+    coverage: float | None
+    grounded: bool
+    structured_query: Query   # salvato con il feedback
+
+# SSE da POST /ask:  token* → clips → done(AnswerPayload)</code></pre></div></div>
+</div></section>
+
+<!-- MILESTONE -->
+<section class="route" data-route="milestone"><div class="wrap">
+  <div class="sec-n">03</div><h2>Milestone</h2>
+  <p class="lead">Venti settimane a dieci ore la settimana per area. Le settimane per milestone sono modificabili; il budget si ricalcola e si confronta con la somma delle ore dei task nella board.</p>
+  <div class="tlbar"><label>Inizio <input type="date" class="txt" id="startdate"></label><span id="enddate"></span><button class="btn sm" id="resetweeks">Ripristina settimane</button></div>
+  <div class="gantt"><div class="gl" id="gl"></div><div class="wkrow" id="wkrow"></div></div>
+  <div class="msdet" id="msdet"></div>
+  <div class="note"><strong>Il punto di contatto è P2.7 → S2.1</strong>, all'inizio di M2: la prima timeline reale passa dal worker al bucket condiviso, e l'assistente passa dai dati sintetici a quelli veri. Il generatore sintetico deve aver prodotto dati sporchi, altrimenti qui si rompe tutto insieme. Una settimana di assestamento è normale.</div>
+</div></section>
+
+<!-- LAVORO -->
+<section class="route" data-route="lavoro"><div class="wrap">
+  <div class="sec-n">04</div><h2>Lavoro</h2>
+  <p class="lead">Board per area. Trascina i task tra colonne o clicca lo stato per avanzarlo; clicca le ore per correggerle. Tutto resta nel tuo browser.</p>
+  <div class="tb-top">
+    <div class="seg" id="areaseg"><span class="pill"></span><button data-a="p" aria-pressed="true">Percezione</button><button data-a="s">Assistente</button></div>
+    <div class="seg" id="msseg"><span class="pill"></span><button data-ms="all" aria-pressed="true">Tutte</button><button data-ms="M0">M0</button><button data-ms="M1">M1</button><button data-ms="M2">M2</button><button data-ms="M3">M3</button></div>
+    <input class="txt" id="search" placeholder="Cerca…" style="min-width:160px">
+    <button class="btn sm" id="extratoggle" aria-pressed="true">Mostra extra</button>
+    <div class="seg" id="viewseg"><span class="pill"></span><button data-v="board" aria-pressed="true">Board</button><button data-v="list">Lista</button></div>
+  </div>
+  <div class="tb-stats" id="tbstats"></div>
+  <div id="boardhost"></div>
+  <div class="cols" style="margin-top:1.6rem">
+    <div class="card p"><h4>Percezione · ambiente</h4><pre style="margin:.4rem 0"><code>python 3.12 · uv · docker · ffmpeg · driver NVIDIA
+uv sync --extra gpu
+make dev              # postgres, minio, burr-ui, api, web
+make smoke-gpu        # YOLO su un frame: verifica CUDA
+make worker           # consuma la coda</code></pre><p style="font-size:.88rem;margin:.5rem 0 0;color:var(--muted)">L'inferenza richiede la macchina con la GPU; il training gira su Kaggle. Il worker è un servizio condiviso: chi ha la scheda lo tiene acceso, l'altro mette partite in coda.</p></div>
+    <div class="card s"><h4>Assistente · ambiente</h4><pre style="margin:.4rem 0"><code>python 3.12 · uv · node 20 · pnpm · docker
+uv sync
+make dev
+make seed-synth       # 3 partite sintetiche
+pnpm --filter web dev</code></pre><p style="font-size:.88rem;margin:.5rem 0 0;color:var(--muted)">Nessuna GPU. Fino a M2 dati sintetici; poi Parquet ed eventi dal bucket condiviso. Prima la parte deterministica (DSL, compilatore, test), poi l'LLM.</p></div>
+  </div>
+</div></section>
+
+<!-- DECISIONI -->
+<section class="route" data-route="decisioni"><div class="wrap">
+  <div class="sec-n">05</div><h2>Decisioni</h2>
+  <p class="lead">Le decisioni prese, una riga ciascuna; il testo esteso va in <code>docs/adr/</code>. Quella aperta è segnata.</p>
+  <div id="adrs"></div>
+  <h3>Prerequisiti</h3>
+  <div class="pre" id="prereq"></div>
+  <h3>Convenzioni</h3>
+  <div class="cols">
+    <div class="card"><h4>Git e PR</h4><ul style="margin:0;font-size:.92rem"><li>Branch: <code>perc/&lt;topic&gt;</code>, <code>asst/&lt;topic&gt;</code>, <code>core/&lt;topic&gt;</code></li><li>PR piccole, sotto le 400 righe. Template: cosa / perché / come testato</li><li>Conventional commits</li><li><code>core/</code> e <code>docs/schema.md</code> → due reviewer. Il resto uno, entro 48 h</li><li>Squash merge; <code>main</code> sempre verde</li></ul></div>
+    <div class="card"><h4>Codice</h4><ul style="margin:0;font-size:.92rem"><li>ruff + pyright strict in CI, bloccanti</li><li>Chiavi stringa come costanti: <code>S.RESULTS</code>, <code>Cls.BALL</code></li><li><code>tests/test_graphs.py</code> costruisce ogni combinazione di config del DAG e il grafo Burr</li><li>Ogni file di config validato contro lo schema Pydantic</li><li>Nessun secret nel repo; <code>.env.example</code> aggiornato</li><li><code>AGENTS.md</code> alla radice</li></ul></div>
+  </div>
+  <div class="cols">
+    <div class="card"><h4>Dati</h4><ul style="margin:0;font-size:.92rem"><li><code>confidence</code>, <code>coverage</code>, <code>pipeline_version</code>: obbligatori</li><li>Nuova versione = nuova partizione Parquet, mai sovrascrittura</li><li>I pesi sul bucket, nome = sha</li><li><code>track_id</code> non è un giocatore</li></ul></div>
+    <div class="card"><h4>Definition of done di un task</h4><ul style="margin:0;font-size:.92rem"><li>Test in CI</li><li>Tocca DAG o grafo → <code>test_graphs</code> verde</li><li>Tocca lo schema → migrazione + <code>docs/schema.md</code></li><li>È una decisione → ADR</li><li>Una riga in <code>STATUS.md</code></li></ul></div>
+  </div>
+</div></section>
+</main>
+<footer><div class="wrap">Football Video Assistant · le spunte, le ore e le date sono salvate solo nel tuo browser</div></footer>
+
+<script>
+(function(){"use strict";
+var NS='http://www.w3.org/2000/svg';
+function el(n,a,p){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function h(tag,cls,html){var e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e;}
+var store={get:function(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}},set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+function segInit(seg,attr,onChange,initial){var pill=seg.querySelector('.pill'),bs=seg.querySelectorAll('button');
+  function set(v){bs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset[attr]===v?'true':'false');});var b=seg.querySelector('[data-'+attr+'="'+v+'"]')||bs[0];pill.style.left=b.offsetLeft+'px';pill.style.width=b.offsetWidth+'px';onChange(v);}
+  bs.forEach(function(b){b.addEventListener('click',function(){set(b.dataset[attr]);});});set(initial||bs[0].dataset[attr]);return set;}
+
+/* router */
+var routes=document.querySelectorAll('.route'),nav=document.getElementById('nav'),ind=nav.querySelector('.ind'),links=[].slice.call(nav.querySelectorAll('a'));
+function setInd(a){ind.style.left=a.offsetLeft+'px';ind.style.width=a.offsetWidth+'px';}
+var hooks={};
+function go(r){r=r||'home';var found=false;routes.forEach(function(s){var on=s.dataset.route===r;s.classList.toggle('on',on);if(on)found=true;});
+  if(!found)return go('home');links.forEach(function(a){var on=a.dataset.r===r;a.classList.toggle('on',on);if(on)setInd(a);});
+  try{window.scrollTo(0,0);}catch(e){}try{history.replaceState(null,'','#/'+(r==='home'?'':r));}catch(e){}
+  document.querySelectorAll('.tabs').forEach(initTabs);if(hooks[r])hooks[r]();}
+window.addEventListener('hashchange',function(){go((location.hash.replace(/^#\/?/,'')||'home').split('?')[0]);});
+document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href^="#/"]');if(!a)return;e.preventDefault();go(a.getAttribute('href').replace(/^#\/?/,'')||'home');});
+links.forEach(function(a){a.addEventListener('mouseenter',function(){setInd(a);});});nav.addEventListener('mouseleave',function(){var on=nav.querySelector('a.on');if(on)setInd(on);});
+
+/* area filter */
+var seg=document.getElementById('seg');
+segInit(seg,'f',function(f){document.body.classList.remove('f-p','f-s');seg.classList.remove('sp','ss');if(f==='p'){document.body.classList.add('f-p');seg.classList.add('sp');}if(f==='s'){document.body.classList.add('f-s');seg.classList.add('ss');}store.set('filter',f);},store.get('filter','all'));
+
+document.addEventListener('mousemove',function(e){var c=e.target.closest&&e.target.closest('.card');if(!c)return;var r=c.getBoundingClientRect();c.style.setProperty('--mx',(e.clientX-r.left)+'px');c.style.setProperty('--my',(e.clientY-r.top)+'px');});
+function initTabs(g){if(g.dataset.init)return;g.dataset.init=1;var tabs=g.querySelectorAll('.tab'),ti=g.querySelector('.tind');
+  function gt(t){tabs.forEach(function(o){o.setAttribute('aria-selected',o===t?'true':'false');var p=document.getElementById(o.dataset.pane);if(p)p.hidden=(o!==t);});ti.style.left=t.offsetLeft+'px';ti.style.width=t.offsetWidth+'px';}
+  tabs.forEach(function(t){t.addEventListener('click',function(){gt(t);});});requestAnimationFrame(function(){gt(tabs[0]);});}
+
+/* home dots */
+(function(){var g=document.getElementById('dots');var pts=[[.1,.5],[.24,.25],[.24,.5],[.24,.75],[.4,.35],[.4,.65],[.55,.5]];
+  pts.forEach(function(p){el('circle',{cx:20+p[0]*380,cy:20+p[1]*230,r:4.5,fill:'#E8B33C',opacity:.9},g);el('circle',{cx:20+(1-p[0])*380,cy:20+(1-p[1])*230,r:4.5,fill:'#5AA9E6',opacity:.9},g);});
+  el('circle',{cx:210,cy:135,r:3.2,fill:'#EAF0EB'},g);})();
+
+/* ================= SYSTEM MAP ================= */
+var ZONES={dev:[{id:'host',x:20,y:20,w:300,h:340,t:'MACCHINA CON GPU · host, fuori da Docker'},{id:'dock',x:340,y:20,w:380,h:430,t:'DOCKER COMPOSE · sulla macchina di ciascuno'},{id:'ext',x:740,y:20,w:240,h:340,t:'SERVIZI ESTERNI'},{id:'usr',x:740,y:380,w:240,h:70,t:'UTENTE'}],
+ prod:[{id:'host',x:20,y:20,w:300,h:340,t:'GPU · on-prem o a noleggio'},{id:'dock',x:340,y:20,w:380,h:430,t:'CLOUD GESTITO'},{id:'ext',x:740,y:20,w:240,h:340,t:'SERVIZI ESTERNI'},{id:'usr',x:740,y:380,w:240,h:70,t:'UTENTE'}]};
+var NODES=[
+ {id:'intake',k:'p',x:50,y:60,w:240,h:46,l:{dev:'Intake CLI',prod:'Intake job'},sub:'ffmpeg · transcodifica, HLS',desc:'Normalizza il video, lo segmenta in HLS, carica sul bucket e registra la partita. Qui si inseriscono a mano le ancore dell\'orologio e l\'orientamento (M1), poi automatizzati.'},
+ {id:'worker',k:'p',x:50,y:150,w:240,h:56,l:{dev:'GPU worker',prod:'GPU worker'},sub:'Hamilton · YOLO · BoT-SORT · SigLIP',desc:'Consuma la coda in Postgres. Per ogni partita esegue il DAG di percezione e derivazione. Un solo processo, tutti i modelli residenti (~7 GB VRAM). ~40 min per partita. È un servizio condiviso: chiunque mette partite in coda.'},
+ {id:'cache',k:'d',x:50,y:260,w:240,h:46,l:{dev:'Cache Hamilton',prod:'Cache Hamilton'},sub:{dev:'disco locale',prod:'S3'},desc:'Risultati intermedi dei nodi per hash di codice e input. È ciò che evita di rilanciare la GPU quando cambia un detector di eventi. Può essere svuotata senza perdere nulla.'},
+ {id:'pg',k:'d',x:370,y:60,w:160,h:56,l:{dev:'Postgres + pgvector',prod:'Postgres gestito'},sub:'eventi · metriche · coda · stato Burr',desc:'Un solo database per cinque lavori: eventi e metriche, coda dei job (SKIP LOCKED), stato delle conversazioni Burr, feedback, eval e pipeline_runs. Piccolo, interrogabile, mutabile.'},
+ {id:'s3',k:'d',x:550,y:60,w:150,h:56,l:{dev:'MinIO (S3)',prod:'S3 + CDN'},sub:'video · HLS · Parquet · pesi',desc:'Il dato grosso e immutabile: video sorgente, segmenti HLS, Parquet del tracking partizionato per versione, pesi dei modelli per sha. In sviluppo è MinIO locale, ma il bucket condiviso è quello vero: è il canale del passaggio dati tra le due aree.'},
+ {id:'api',k:'s',x:370,y:200,w:160,h:56,l:{dev:'API',prod:'API · Cloud Run'},sub:'FastAPI · Burr',desc:'Ospita la macchina a stati Burr. A runtime: query SQL su Postgres, chiamate al provider LLM, streaming SSE verso il web. Nessuna GPU, mai. Stateless: lo stato è in Postgres.'},
+ {id:'burrui',k:'s',x:550,y:200,w:150,h:56,l:{dev:'Burr UI',prod:'Burr UI (interno)'},sub:'tracing e replay',desc:'Mostra transizioni di stato, input e output di ogni azione, e permette il replay di una conversazione contro un prompt nuovo. Unica observability dell\'assistente fino a M2.'},
+ {id:'web',k:'s',x:370,y:340,w:160,h:56,l:{dev:'Web',prod:'Web · Vercel'},sub:'Next.js · hls.js',desc:'Player con seek al secondo, chat in streaming, marker sulla timeline, chip evento cliccabili, pollice su e giù.'},
+ {id:'kaggle',k:'p',x:770,y:60,w:180,h:56,l:{dev:'Kaggle · training',prod:'Kaggle · training'},sub:'T4 / P100, 30 h/sett.',desc:'Il training di YOLO non gira sulla macchina con la GPU: è una tantum, e Kaggle offre GPU gratuite con sessioni stabili. Il notebook scarica il dataset dal bucket e carica i pesi con lo sha.'},
+ {id:'llm',k:'s',x:770,y:200,w:180,h:56,l:{dev:'Provider LLM',prod:'Provider LLM'},sub:'Claude · GPT · Gemini',desc:'Tre chiamate per richiesta: intent (modello economico), query strutturata e risposta (modello medio). Prompt caching sul prefisso stabile. Routing per nodo da config.'},
+ {id:'user',k:'d',x:770,y:395,w:180,h:44,l:{dev:'Browser',prod:'Browser'},sub:'',desc:'Fa una domanda in italiano, riceve testo in streaming e un elenco di momenti, clicca e il player salta al secondo giusto.'}];
+var EDGES=[['intake','s3','video, HLS','w'],['intake','pg','matches, orientamento','w'],['pg','worker','coda, matches','r'],['s3','worker','video, pesi','r'],['worker','s3','Parquet tracks','w'],['worker','pg','eventi, metriche, runs','w'],['worker','cache','intermedi','x'],['s3','kaggle','dataset','r'],['kaggle','s3','pesi (sha)','w'],['pg','api','eventi, metriche','r'],['api','pg','stato Burr, feedback','w'],['api','llm','prompt / output','x'],['api','burrui','tracce','w'],['api','web','SSE: token, clip','w'],['s3','web','segmenti HLS','r'],['web','user','UI','x']];
+(function(){var svg=document.getElementById('sysmap');if(!svg)return;var gz=document.getElementById('zones'),ge=document.getElementById('edges'),gl=document.getElementById('elabels'),gn=document.getElementById('nodes'),det=document.getElementById('mdet');
+  var mode='dev',sel=null,nodeEls={},edgeEls=[];
+  function N(id){for(var i=0;i<NODES.length;i++)if(NODES[i].id===id)return NODES[i];}
+  function txt(v){return typeof v==='string'?v:(v[mode]||'');}
+  function anchors(a,b){var ax=a.x+a.w/2,ay=a.y+a.h/2,bx=b.x+b.w/2,by=b.y+b.h/2;
+    if(b.x>a.x+a.w+10)return [a.x+a.w,ay,b.x,by,'h'];if(a.x>b.x+b.w+10)return [a.x,ay,b.x+b.w,by,'h'];
+    if(b.y>a.y+a.h)return [ax,a.y+a.h,bx,b.y,'v'];return [ax,a.y,bx,b.y+b.h,'v'];}
+  function path(a,b){var p=anchors(a,b),x1=p[0],y1=p[1],x2=p[2],y2=p[3];var c1,c2;
+    if(p[4]==='h'){var mx=(x1+x2)/2;c1=[mx,y1];c2=[mx,y2];}else{var my=(y1+y2)/2;c1=[x1,my];c2=[x2,my];}
+    var d='M'+x1+' '+y1+' C '+c1[0]+' '+c1[1]+', '+c2[0]+' '+c2[1]+', '+x2+' '+y2;
+    var mid=[(x1+3*c1[0]+3*c2[0]+x2)/8,(y1+3*c1[1]+3*c2[1]+y2)/8];return [d,mid];}
+  function render(){gz.innerHTML='';ge.innerHTML='';gl.innerHTML='';gn.innerHTML='';edgeEls=[];nodeEls={};
+    ZONES[mode].forEach(function(z){var g=el('g',{class:'zone'},gz);el('rect',{x:z.x,y:z.y,width:z.w,height:z.h,rx:10},g);var t=el('text',{x:z.x+10,y:z.y+16},g);t.textContent=z.t;});
+    EDGES.forEach(function(e){var a=N(e[0]),b=N(e[1]),pm=path(a,b);var p=el('path',{d:pm[0],class:'me '+e[3]},ge);
+      var lab=el('text',{x:pm[1][0],y:pm[1][1]+3,'text-anchor':'middle',class:'ml'},gl);lab.textContent=e[2];
+      var bb={w:e[2].length*5.6+8,h:13};var bg=el('rect',{x:pm[1][0]-bb.w/2,y:pm[1][1]-7,width:bb.w,height:bb.h,rx:3,class:'mlb'},gl);gl.insertBefore(bg,lab);
+      edgeEls.push({e:e,p:p,l:lab,bg:bg});});
+    NODES.forEach(function(n){var g=el('g',{class:'mn a'+n.k,tabindex:'0',role:'button'},gn);nodeEls[n.id]=g;el('rect',{x:n.x,y:n.y,width:n.w,height:n.h,rx:8},g);
+      var sub=txt(n.sub);var t=el('text',{x:n.x+12,y:n.y+(sub?20:n.h/2+4)},g);t.textContent=txt(n.l);if(sub){var s=el('text',{x:n.x+12,y:n.y+36,class:'sub'},g);s.textContent=sub;}
+      function pick(){select(n.id);}g.addEventListener('click',pick);g.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();pick();}});});
+    if(sel)select(sel);}
+  function select(id){sel=id;var n=N(id);var adj={};adj[id]=1;
+    edgeEls.forEach(function(x){var hot=x.e[0]===id||x.e[1]===id;x.p.classList.toggle('hot',hot);x.p.classList.toggle('dim',!hot);x.l.classList.toggle('hot',hot);x.l.classList.toggle('dim',!hot);x.bg.classList.toggle('dim',!hot);if(hot){adj[x.e[0]]=1;adj[x.e[1]]=1;}});
+    Object.keys(nodeEls).forEach(function(k){nodeEls[k].classList.toggle('sel',k===id);nodeEls[k].classList.toggle('dim',!adj[k]);});
+    var reads=[],writes=[];edgeEls.forEach(function(x){var e=x.e;if(e[1]===id&&(e[3]==='r'||e[3]==='w'))reads.push('<b style="color:var(--chalk)">'+txt(N(e[0]).l)+'</b> — '+e[2]);
+      if(e[0]===id&&e[3]==='w')writes.push('<b style="color:var(--chalk)">'+txt(N(e[1]).l)+'</b> — '+e[2]);
+      if(e[3]==='x'){if(e[0]===id)writes.push('<b style="color:var(--chalk)">'+txt(N(e[1]).l)+'</b> — '+e[2]+' (bidirezionale)');if(e[1]===id)reads.push('<b style="color:var(--chalk)">'+txt(N(e[0]).l)+'</b> — '+e[2]+' (bidirezionale)');}});
+    det.innerHTML='<div><h5>'+txt(n.l)+' <span class="tag '+(n.k==='d'?'x':n.k)+'">'+(n.k==='p'?'percezione':n.k==='s'?'assistente':'dato')+'</span></h5><p>'+n.desc+'</p></div>'+
+      '<div class="io"><b>RICEVE DA</b>'+(reads.length?reads.map(function(r){return '<span>'+r+'</span>';}).join(''):'<span style="color:var(--dim)">—</span>')+'</div>'+
+      '<div class="io"><b>PRODUCE PER</b>'+(writes.length?writes.map(function(r){return '<span>'+r+'</span>';}).join(''):'<span style="color:var(--dim)">—</span>')+'</div>';}
+  segInit(document.getElementById('modeseg'),'m',function(m){mode=m;render();},'dev');
+  render();})();
+
+/* ================= SCHEMA ================= */
+var T=[
+ {n:'matches',w:'Intake',r:'worker, API, web',why:'Una riga per partita. Contiene le ancore dell\'orologio e il tipo di camera che seleziona la variante del DAG.',c:[['id','text','pk · es. m_2026_09_12_nap_juv',1],['competition, date','',''],['home_team, away_team','text',''],['video_uri, hls_uri','text','bucket'],['duration_s, fps','real',''],['camera_type','text','broadcast | tactical_fixed',1],['half1_kickoff_s, half1_end_s','real','ancora video ↔ orologio, tempo 1',1],['half2_kickoff_s, half2_end_s','real','tempo 2',1],['status','text','queued | processing | ready | failed'],['pipeline_version','text','',1]]},
+ {n:'team_orientation',w:'Intake (M1) · worker (M3)',r:'worker',why:'Quale squadra attacca dove, per tempo. Senza, sommare i due tempi produce numeri privi di senso.',c:[['match_id, team, half','','pk composta',1],['attack_direction','smallint','+1 | −1',1]]},
+ {n:'video_segments',w:'worker',r:'worker, web',why:'Segmentazione per tipo di inquadratura. Solo i segmenti usable alimentano omografia e metriche.',c:[['match_id','text','fk'],['t_start, t_end','real',''],['view_type','text','ViewType',1],['usable','boolean','',1],['half, clock_start, clock_end','','']]},
+ {n:'possessions',w:'worker',r:'worker, API',why:'Run di possesso per squadra, con isteresi. Base di tutti gli eventi.',c:[['id','text','pk'],['match_id','text','fk'],['t_start, t_end','real',''],['team','smallint',''],['start_zone, end_zone','text','Zone'],['outcome','text',''],['source','text','ball | fallback',1],['confidence','real','',1]]},
+ {n:'events',w:'worker',r:'API, web',why:'Il cuore. Poche migliaia per partita, interrogabili in ogni modo, mutabili in M4.',c:[['id','text','pk · evt_…',1],['match_id','text','fk'],['type','text','EventType, dal registry',1],['team','smallint',''],['t_video','real','dove salta il player',1],['t_end','real',''],['half, match_clock','','',1],['x_pitch, y_pitch','real','metri normalizzati'],['attrs','jsonb','campi per tipo'],['confidence','real','0–1',1],['source','text','detector | derived | manual'],['status','text','confirmed fino a M3',1],['revision','int','',1],['pipeline_version','text','',1]]},
+ {n:'team_metrics',w:'worker',r:'API',why:'Aggregati per finestra. La coverage dice su quanti frame è calcolato il numero.',c:[['match_id, team, half','',''],['window_start, window_end','real','finestre da 5\''],['metric','text','MetricName'],['value','real',''],['coverage','real','frazione di frame con ≥7 visibili',1],['pipeline_version','text','',1]]},
+ {n:'event_embeddings',w:'worker',r:'API',why:'Vettori per "momenti simili". pgvector, HNSW.',c:[['event_id','text','pk, fk'],['embedding','vector(768)','']]},
+ {n:'jobs',w:'Intake, API',r:'worker',why:'La coda. SELECT … FOR UPDATE SKIP LOCKED. Chiunque accoda, il worker consuma.',c:[['id','serial','pk'],['match_id','text','fk'],['kind','text','ingest | reprocess'],['status','text','queued | running | done | failed'],['locked_at, finished_at','',''],['error','text','']]},
+ {n:'feedback',w:'API',r:'eval',why:'Da qui cresce l\'eval set. Ogni pollice giù è un caso candidato.',c:[['id, ts','',''],['conversation_id, turn','',''],['query_text','text',''],['structured_query','jsonb',''],['returned_event_ids','text[]',''],['rating','smallint','−1 | +1'],['note','text','']]},
+ {n:'pipeline_runs',w:'worker',r:'chi debugga',why:'Observability della percezione senza UI. Scritta da un adapter Hamilton.',c:[['run_id, match_id','',''],['node','text',''],['started, duration_s','',''],['rows_out','int',''],['checks','jsonb','esito dei @check_output'],['pipeline_version, config','','']]},
+ {n:'burr_state',w:'API',r:'API, Burr UI',why:'Stato delle conversazioni, gestito dal persister di Burr.',c:[['app_id','text','= conversation_id'],['partition_key, sequence_id','',''],['state','jsonb',''],['position','text','azione corrente']]},
+ {n:'eval_cases · eval_runs',w:'chi cura l\'eval',r:'CI',why:'Golden set e risultati, per entrambi gli harness.',c:[['case_id','text',''],['kind','text','perception | assistant'],['input, expected','jsonb',''],['run_id, score, details','','']]}];
+(function(){var list=document.getElementById('tlist'),det=document.getElementById('tdet');
+  T.forEach(function(t,i){var b=h('button',null,t.n);b.addEventListener('click',function(){show(i);});list.appendChild(b);});
+  function show(i){list.querySelectorAll('button').forEach(function(b,j){b.classList.toggle('on',i===j);});var t=T[i];
+    det.innerHTML='<h4>'+t.n+'</h4><div class="why">'+t.why+'</div><div class="rw"><span>scrive <b>'+t.w+'</b></span><span>legge <b>'+t.r+'</b></span></div>'+t.c.map(function(c){return '<div class="col'+(c[3]?' req':'')+'"><span class="cn">'+c[0]+'</span><span class="ct">'+c[1]+'</span><span class="cd">'+c[2]+'</span></div>';}).join('');}
+  show(0);})();
+
+/* ================= DATA: milestones, tasks ================= */
+var HPW=10;
+var MS=[
+ {n:'M0',t:'Il contratto',wk:3,body:'Schema congelato, scaffold, ambienti, generatore sintetico, un video reale riproducibile. Le decisioni ratificate. Lavoro in coppia.',done:'<code>make dev</code> verde su entrambe le macchine · video con seek nella UI · <code>test_graphs</code> verde in CI · <code>docs/schema.md</code> congelato · <code>make seed-synth</code> produce 3 partite in &lt; 10 s'},
+ {n:'M1',t:'I due binari',wk:6,body:'<span style="color:var(--p)">Percezione</span>: pipeline end-to-end su una partita. <span style="color:var(--s)">Assistente</span>: completo su dati sintetici. In autonomia.',done:'<span style="color:var(--p)">P</span>: Parquet per 1 partita · radar corretto su ≥80% dei segmenti tattici · acceptance_rate ≥ 0.6 · mAP giocatori ≥ 0.85<br><span style="color:var(--s)">S</span>: «i corner del secondo tempo» su sintetico → clip giuste · 20/20 query eseguibili · grafo Burr persistito'},
+ {n:'M2',t:'Convergenza',wk:6,body:'<span style="color:var(--p)">Percezione</span>: derivazione degli eventi, prima timeline reale sul bucket (P2.7). <span style="color:var(--s)">Assistente</span>: dati reali (S2.1), eval in CI, feedback, highlight, report.',done:'Una domanda in italiano su una partita vera restituisce i momenti giusti · eval in CI con soglie · recall@5 ≥ 0.80 · P/R ≥ 0.80 sugli eventi geometrici · feedback salvato'},
+ {n:'M3',t:'Multi-partita',wk:5,body:'<span style="color:var(--p)">Percezione</span>: metriche con coverage, 5–10 partite, worker in container. <span style="color:var(--s)">Assistente</span>: confronto, report su N partite, momenti simili, Langfuse, deploy.',done:'«Come si comporta questa squadra in uscita dal pressing nelle ultime 5 partite» → report con clip e coverage · API in cloud · worker in container che consuma la coda'}];
+/* [ms, id, title, desc, hours, flag]  flag: j=insieme s=sync x=extra */
+var TASKS=[
+ ['M0','P0.1','Scaffold del repo','uv workspace, packages/core · perception · derivation, ruff, pyright, pytest, CI vuota',3,'j'],
+ ['M0','P0.2','docker compose + Makefile','postgres+pgvector, minio; make dev / smoke-gpu / worker',2],
+ ['M0','P0.3','Review del contratto','tabelle, enum, coordinate, campi obbligatori',3,'j'],
+ ['M0','P0.4','Intake','ffmpeg: fps costante, HLS a 4 s, upload, riga in matches, riga in jobs',4],
+ ['M0','P0.5','CLI allineamento e orientamento','4 timestamp e 2 direzioni → matches, team_orientation',2],
+ ['M0','P0.6','Scheletro Hamilton','dataflow.py con nodi stub; test_dag_builds su ogni config',4],
+ ['M0','P0.7','Notebook Kaggle','dataset dal bucket, training, upload pesi con sha',3],
+ ['M0','P0.8','Frame per annotazione','5–6 partite, frame diversificati, progetto Roboflow/CVAT a 4 classi',4],
+ ['M0','P0.9','Adapter pipeline_runs','lifecycle hook: tempo, righe, esito dei check',2],
+ ['M0','P0.10','ADR iniziali','',2,'j'],
+ ['M1','P1.1','P1 frames','generatore PyAV a 10 fps',3],
+ ['M1','P1.2','P2 shot_boundaries','istogrammi HSV, soglia, durata minima',3],
+ ['M1','P1.3','P3 shot_segments','un frame per segmento → VLM → view_type',4],
+ ['M1','P1.4','P4 tactical_frames','filtro sui segmenti usable prima della GPU',1],
+ ['M1','P1.5','Sprint di annotazione','dataset v1: 1500 frame. Pre-annotazione VLM + correzione',10],
+ ['M1','P1.6','Training YOLO v1','Kaggle, 1280, 100 epoche',3],
+ ['M1','P1.7','P5 detections_full','YOLO11m fp16, batch 8 → Polars',4],
+ ['M1','P1.8','P6 detections_ball','tile 3×2 a risoluzione nativa',5],
+ ['M1','P1.9','P8 tracks_raw','boxmot BoT-SORT con GMC e ReID',6],
+ ['M1','P1.10','P9–P10 team_labels','SigLIP → UMAP → KMeans; voto per track_id',5],
+ ['M1','P1.11','P11–P13 homography','keypoint → RANSAC; gate; smoothing',8],
+ ['M1','P1.12','P14 · P16 check_output','acceptance_rate e max_player_speed',1],
+ ['M1','P1.13','P15 · P17 pitch_tracks + Parquet','proiezione, orientamento, orologio; partizione Hive',4],
+ ['M1','P1.14','Script radar QA','overlay 2D sul video',3],
+ ['M1','P1.15','Ground truth + metriche','10\' annotati; mAP, HOTA, riproiezione',5],
+ ['M2','P2.1','D1 ball_track','Kalman + interpolazione ≤ 1 s',5],
+ ['M2','P2.2','D2 ball_carrier','join_asof palla → giocatore entro 2 m',3],
+ ['M2','P2.3','D3 possessions','run-length con isteresi',4],
+ ['M2','P2.4','Registry detector + config','decoratore, schema Pydantic, test su ogni config',4],
+ ['M2','P2.5','D7 detector geometrici','corner, throw_in, goal_kick, turnover, kickoff',8],
+ ['M2','P2.6','D9 events + D12 persist','dedup, confidence, upsert per versione',4],
+ ['M2','P2.7','★ Prima timeline reale sul bucket','Parquet + eventi di una partita. Il punto di contatto',1,'s'],
+ ['M2','P2.8','D6 team_shape','centroide, ampiezza, profondità, linea; gate ≥7 visibili',5],
+ ['M2','P2.9','D8 detector statistici','shot, cross, pass_final_third, counter_attack, press_trigger',10],
+ ['M2','P2.10','D4–D5 possesso di fallback','direzione collettiva del movimento; confidence 0.4',5],
+ ['M2','P2.11','Eval degli eventi','2 partite annotate; P/R per tipo ±2 s; soglia in CI',6],
+ ['M2','P2.12','OCR del cronometro','automatizza l\'allineamento dall\'overlay',5,'x'],
+ ['M3','P3.1','D10 team_metrics','finestre da 5\' con coverage; @parameterize',6],
+ ['M3','P3.2','D11 event_embeddings','testo strutturato → vettore → pgvector',4],
+ ['M3','P3.3','Batch multi-partita','5–10 partite; job notturno dalla coda',6],
+ ['M3','P3.4','Viste aggregate','materialized view per le query cross-partita',5],
+ ['M3','P3.5','Orientamento automatico','dalla posizione media dei portieri',4],
+ ['M3','P3.6','Dataset v2 + retrain','dai fallimenti reali; confronto v1/v2',8],
+ ['M3','P3.7','Export TensorRT','+40% sulla detection',4,'x'],
+ ['M3','P3.8','Worker in container','runtime NVIDIA, multi-stage, consuma la coda',8],
+ ['M3','P3.9','Runbook percezione','',3],
+ ['M0','S0.1','Scaffold del repo','packages/assistant · api, apps/web',3,'j'],
+ ['M0','S0.2','Review del contratto','tabelle, enum, DSL',3,'j'],
+ ['M0','S0.3','core/models + migrazioni','Pydantic per Event, Match, Metric…; Alembic',5],
+ ['M0','S0.4','tools/synth','timeline con dati sporchi: buchi, confidence basse, coverage parziale',6],
+ ['M0','S0.5','DSL','TimeWindow, FindMoments, ComputeMetric, CompareMatches, SimilarMoments',4],
+ ['M0','S0.6','Ambiente senza GPU','compose senza worker; make seed-synth',2],
+ ['M0','S0.7','Next.js + player','hls.js con seek a un timestamp arbitrario',4],
+ ['M0','S0.8','Scheletro Burr','azioni stub, grafo che si costruisce, test',3],
+ ['M0','S0.9','ADR iniziali','',2,'j'],
+ ['M1','S1.1','Compilatore FindMoments','SQL parametrizzato, zone, finestre; test per ramo',5],
+ ['M1','S1.2','Compilatori ComputeMetric · Compare · Similar','',5],
+ ['M1','S1.3','execute_query + repo','SQLAlchemy core, coverage nei risultati',3],
+ ['M1','S1.4','Astrazione LLM','structured()/stream(); 2 provider; routing per nodo',5],
+ ['M1','S1.5','classify_intent + ask_clarification','',3],
+ ['M1','S1.6','resolve_context','fuzzy-match squadre; riferimenti; riscrittura follow-up',5],
+ ['M1','S1.7','build_query','structured output; retry con errore in contesto',4],
+ ['M1','S1.8','compose_answer','streaming; citazioni; frase se coverage < 0.5',4],
+ ['M1','S1.9','verify_grounding','cited ⊆ results',1],
+ ['M1','S1.10','respond + AnswerPayload','',2],
+ ['M1','S1.11','Persistenza Burr + Burr UI','Postgres persister, replay',3],
+ ['M1','S1.12','FastAPI','/ask SSE, /matches, /timeline',5],
+ ['M1','S1.13','Web','chat streaming, chip → seek, marker timeline',8],
+ ['M1','S1.14','Golden set v1','20 query su sintetico',3],
+ ['M1','S1.15','Harness pytest','valida? id attesi? grounded?',4],
+ ['M2','S2.1','★ Passaggio ai dati reali','da P2.7. Una settimana di assestamento',10,'s'],
+ ['M2','S2.2','Golden set v2','40–50 query reali, incluse senza risposta',5],
+ ['M2','S2.3','Feedback','endpoint + 👍/👎 + tabella',4],
+ ['M2','S2.4','Highlight','eventi → clip → ffmpeg concat',6],
+ ['M2','S2.5','Report singola partita','ogni affermazione cita eventi',6],
+ ['M2','S2.6','Prompt caching','prefisso stabile',2],
+ ['M2','S2.7','LLM-as-judge','offline, famiglia diversa, validato su campione',4],
+ ['M2','S2.8','Eval in CI','soglie bloccanti',4],
+ ['M2','S2.9','UI timeline','view_type e coverage sulla barra',5,'x'],
+ ['M2','S2.10','Casi negativi','soglia, escape hatch, casi nel golden set',3],
+ ['M3','S3.1','Compare','intent + UI di confronto',8],
+ ['M3','S3.2','Report multi-partita','',6],
+ ['M3','S3.3','Momenti simili','pgvector HNSW, UI',5],
+ ['M3','S3.4','Langfuse via OTel','una strumentazione sola',4],
+ ['M3','S3.5','Costi','routing da config, costo per richiesta, budget',4],
+ ['M3','S3.6','Deploy API','Cloud Run, secret manager',6],
+ ['M3','S3.7','Deploy web','Vercel',2],
+ ['M3','S3.8','Replay → eval','pollice giù → golden set',4],
+ ['M3','S3.9','Runbook assistente','',3]];
+var TS=store.get('tasks',{});function tsave(){store.set('tasks',TS);}
+function tstate(id){return TS[id]||{st:'todo'};}
+function thours(t){var s=TS[t[1]];return s&&s.h!=null?s.h:t[4];}
+function area(t){return t[1][0]==='P'?'p':'s';}
+var WK=store.get('weeks',null)||MS.map(function(m){return m.wk;});function wsave(){store.set('weeks',WK);}
+
+/* ================= MILESTONES ================= */
+(function(){var gl=document.getElementById('gl'),wkrow=document.getElementById('wkrow'),det=document.getElementById('msdet'),sd=document.getElementById('startdate'),ed=document.getElementById('enddate');
+  var cur=store.get('ms-sel',0);sd.value=store.get('start','2026-09-28');
+  function addW(d,w){var x=new Date(d);x.setDate(x.getDate()+w*7);return x;}
+  function fmt(d){return d.toLocaleDateString('it-IT',{day:'2-digit',month:'short'});}
+  function bounds(i){var st=new Date(sd.value||'2026-09-28');var off=0;for(var k=0;k<i;k++)off+=WK[k];return [addW(st,off),addW(st,off+WK[i])];}
+  function est(i,a){return TASKS.filter(function(t){return t[0]===MS[i].n&&area(t)===a&&t[5]!=='x';}).reduce(function(s,t){return s+thours(t);},0);}
+  function bar(label,e,b,color){var pct=Math.min(100,e/b*100),over=e>b;return '<div class="bud"><span>'+label+'</span><div class="trk"><div class="fil" style="width:'+pct+'%;background:'+color+'"></div><div class="mk" style="left:'+Math.min(100,100)+'%"></div></div><span class="v'+(over?' over':'')+'">'+e+' / '+b+' h</span></div>';}
+  function render(){gl.innerHTML='';wkrow.innerHTML='';var total=WK.reduce(function(s,w){return s+w;},0);
+    MS.forEach(function(m,i){var b=h('button',i===cur?'on':'','<b>'+m.n+' · '+m.t+'</b><small>'+WK[i]+' sett. · '+fmt(bounds(i)[0])+' → '+fmt(bounds(i)[1])+'</small>');b.style.setProperty('--w',WK[i]);b.addEventListener('click',function(){cur=i;store.set('ms-sel',i);render();});gl.appendChild(b);
+      var s=h('span',null,'sett. '+(WK.slice(0,i).reduce(function(a,w){return a+w;},0)+1)+'–'+WK.slice(0,i+1).reduce(function(a,w){return a+w;},0));s.style.setProperty('--w',WK[i]);wkrow.appendChild(s);});
+    ed.textContent='→ fine '+fmt(bounds(MS.length-1)[1])+' · '+total+' settimane · '+total*HPW+' h per area';
+    var m=MS[cur],b=WK[cur]*HPW;
+    det.innerHTML='<div class="hd"><h4>'+m.n+' · '+m.t+'</h4><span class="dates">'+fmt(bounds(cur)[0])+' → '+fmt(bounds(cur)[1])+'</span><label style="margin-left:auto;font-size:.85rem;color:var(--muted)">settimane <input type="number" min="1" max="12" class="txt wkin" id="wkin" value="'+WK[cur]+'"></label></div><p style="margin:.7rem 0 .8rem;max-width:none">'+m.body+'</p>'+bar('Percezione',est(cur,'p'),b,'var(--p)')+bar('Assistente',est(cur,'s'),b,'var(--s)')+'<p style="font-size:.78rem;color:var(--dim);margin:.3rem 0 0">stima dalla board (senza gli extra) contro budget '+WK[cur]+' × '+HPW+' h. La barra rossa dice che i task non ci stanno: allunga la milestone o sposta task.</p><div class="done"><b>Fatto quando</b> — '+m.done+'</div>';
+    det.querySelector('#wkin').addEventListener('change',function(e){var v=Math.max(1,Math.min(12,+e.target.value||1));WK[cur]=v;wsave();render();});}
+  sd.addEventListener('change',function(){store.set('start',sd.value);render();});
+  document.getElementById('resetweeks').addEventListener('click',function(){WK=MS.map(function(m){return m.wk;});wsave();render();});
+  hooks.milestone=render;render();})();
+
+/* ================= BOARD ================= */
+(function(){var host=document.getElementById('boardhost'),stats=document.getElementById('tbstats'),search=document.getElementById('search'),extra=document.getElementById('extratoggle');
+  var A='p',MSF='all',VIEW='board',SHOWX=true,Q='';
+  var STATES=['todo','doing','done'],SN={todo:'DA FARE',doing:'IN CORSO',done:'FATTO'},SB={todo:'da fare',doing:'in corso',done:'fatto'};
+  function filtered(){return TASKS.filter(function(t){return area(t)===A&&(MSF==='all'||t[0]===MSF)&&(SHOWX||t[5]!=='x')&&(!Q||(t[1]+' '+t[2]+' '+t[3]).toLowerCase().indexOf(Q)>=0);});}
+  function card(t){var s=tstate(t[1]),c=h('div','tk '+area(t)+(s.st==='done'?' done':''));c.draggable=true;c.dataset.id=t[1];
+    var fl=t[5]==='j'?'<span class="jt">insieme</span>':t[5]==='s'?'<span class="sy">sync</span>':t[5]==='x'?'<span class="ex">extra</span>':'';
+    c.innerHTML='<div class="hd"><span>'+t[1]+'</span><span class="ms">'+t[0]+'</span>'+fl+'</div><div class="t">'+t[2]+'</div>'+(t[3]?'<div class="d">'+t[3]+'</div>':'')+'<div class="ft"><button class="st '+s.st+'" title="clicca per avanzare">'+SB[s.st]+'</button><span class="hrs" title="clicca per modificare">'+thours(t)+' h</span></div>';
+    c.querySelector('.st').addEventListener('click',function(e){e.stopPropagation();setState(t[1],STATES[(STATES.indexOf(s.st)+1)%3]);});
+    var hr=c.querySelector('.hrs');hr.addEventListener('click',function(e){e.stopPropagation();if(hr.querySelector('input'))return;var v=thours(t);hr.innerHTML='<input type="number" min="0" step="0.5" value="'+v+'">';var inp=hr.querySelector('input');inp.focus();inp.select();
+      function commit(){var n=parseFloat(inp.value);if(!isNaN(n)&&n>=0){TS[t[1]]=Object.assign({},tstate(t[1]),{h:n});tsave();}render();}
+      inp.addEventListener('blur',commit);inp.addEventListener('keydown',function(ev){if(ev.key==='Enter')inp.blur();if(ev.key==='Escape'){inp.value=v;inp.blur();}});});
+    c.addEventListener('dragstart',function(e){e.dataTransfer.setData('text/plain',t[1]);c.classList.add('drag');});c.addEventListener('dragend',function(){c.classList.remove('drag');});
+    return c;}
+  function setState(id,st){TS[id]=Object.assign({},tstate(id),{st:st});tsave();render();}
+  function render(){host.innerHTML='';host.className=VIEW;var ts=filtered();
+    var core=ts.filter(function(t){return t[5]!=='x';}),hrs=core.reduce(function(s,t){return s+thours(t);},0),done=core.filter(function(t){return tstate(t[1]).st==='done';}),dh=done.reduce(function(s,t){return s+thours(t);},0),doing=core.filter(function(t){return tstate(t[1]).st==='doing';}).length;
+    var bud=MSF==='all'?WK.reduce(function(s,w){return s+w;},0)*HPW:WK[MS.findIndex(function(m){return m.n===MSF;})]*HPW;
+    stats.innerHTML='<span><b>'+ts.length+'</b>task</span><span><b>'+done.length+'</b>fatti</span><span><b>'+doing+'</b>in corso</span><span><b>'+hrs+' h</b>stima core</span><span><b style="color:'+(hrs>bud?'var(--risk)':'var(--chalk)')+'">'+bud+' h</b>budget</span><span><b>'+(hrs?Math.round(dh/hrs*100):0)+'%</b>ore completate</span>';
+    if(VIEW==='board'){var b=h('div','board');STATES.forEach(function(st){var col=h('div','colm');var items=ts.filter(function(t){return tstate(t[1]).st===st;});
+        col.innerHTML='<h5><span>'+SN[st]+'</span><span>'+items.length+'</span></h5>';items.forEach(function(t){col.appendChild(card(t));});if(!items.length)col.appendChild(h('div','empty','trascina qui'));
+        col.addEventListener('dragover',function(e){e.preventDefault();col.classList.add('over');});col.addEventListener('dragleave',function(){col.classList.remove('over');});
+        col.addEventListener('drop',function(e){e.preventDefault();col.classList.remove('over');var id=e.dataTransfer.getData('text/plain');if(id)setState(id,st);});b.appendChild(col);});host.appendChild(b);}
+    else{var byM={};ts.forEach(function(t){(byM[t[0]]=byM[t[0]]||[]).push(t);});Object.keys(byM).sort().forEach(function(m){var g=byM[m],d=g.filter(function(t){return tstate(t[1]).st==='done';}).length;var mm=MS.filter(function(x){return x.n===m;})[0];
+        host.appendChild(h('div','grp',m+' · '+mm.t+' <small>'+d+' / '+g.length+' · '+g.filter(function(t){return t[5]!=='x';}).reduce(function(s,t){return s+thours(t);},0)+' h</small>'));g.forEach(function(t){host.appendChild(card(t));});});}
+    homeRings();}
+  segInit(document.getElementById('areaseg'),'a',function(v){A=v;render();},'p');
+  segInit(document.getElementById('msseg'),'ms',function(v){MSF=v;render();},'all');
+  segInit(document.getElementById('viewseg'),'v',function(v){VIEW=v;render();},'board');
+  search.addEventListener('input',function(){Q=search.value.trim().toLowerCase();render();});
+  extra.addEventListener('click',function(){SHOWX=!SHOWX;extra.setAttribute('aria-pressed',String(SHOWX));extra.textContent=SHOWX?'Mostra extra':'Extra nascosti';render();});
+  hooks.lavoro=render;render();})();
+
+/* ================= HOME RINGS ================= */
+function homeRings(){var host=document.getElementById('home-rings');if(!host)return;host.innerHTML='';var C=2*Math.PI*40;
+  [['p','Percezione','var(--p)'],['s','Assistente','var(--s)'],['all','Totale','var(--chalk)']].forEach(function(r){var ts=TASKS.filter(function(t){return t[5]!=='x'&&(r[0]==='all'||area(t)===r[0]);});var tot=ts.reduce(function(s,t){return s+thours(t);},0),d=ts.filter(function(t){return tstate(t[1]).st==='done';}).reduce(function(s,t){return s+thours(t);},0),n=ts.filter(function(t){return tstate(t[1]).st==='done';}).length,p=tot?d/tot:0;
+    var div=h('div','ring','<svg viewBox="0 0 96 96"><circle class="rt" cx="48" cy="48" r="40"/><circle class="rf" cx="48" cy="48" r="40" stroke="'+r[2]+'" stroke-dasharray="'+C+'" stroke-dashoffset="'+C+'"/><text class="rn" x="48" y="56" text-anchor="middle">'+Math.round(p*100)+'%</text></svg><div><div class="rl">'+r[1]+'</div><div class="rs">'+n+' / '+ts.length+' task · '+d+' / '+tot+' h</div></div>');host.appendChild(div);
+    requestAnimationFrame(function(){requestAnimationFrame(function(){div.querySelector('.rf').style.strokeDashoffset=C*(1-p);});});});}
+hooks.home=homeRings;
+
+/* ================= ADR + PREREQ ================= */
+var ADR=[['001','Broadcast come tipo di camera primario','Serie A è l\'obiettivo e non c\'è accesso a footage grandangolare. Osservabilità parziale e diritti sono accettati; @config.when tiene aperta la variante fixed.'],
+ ['002','Due sistemi, un contratto','Percezione e assistente hanno proprietà opposte e non si chiamano mai: comunicano solo tramite Postgres e bucket.'],
+ ['003','Hamilton per la percezione, Burr per l\'assistente','DAG aciclico contro macchina a stati con cicli. Il loop sui frame non entra in nessuno dei due.'],
+ ['004','Polars, non pandas','join_asof, over(), lazy con pushdown su Parquet. Pandas solo al bordo.'],
+ ['005','Postgres + pgvector unico database; Parquet per il tracking','Un sistema per cinque lavori. Si estrae un componente solo quando è un collo di bottiglia misurato.'],
+ ['006','Divisione del lavoro tra le due aree','Vincoli: l\'inferenza gira sulla macchina con la GPU, ma il worker è un servizio condiviso via coda, quindi chi lavora sull\'assistente non ha bisogno della scheda. Il training è su Kaggle.','open'],
+ ['007','Training su Kaggle/Colab, inferenza sulla GPU locale','Il training è una tantum; i pesi vivono sul bucket per sha.'],
+ ['008','Observability proporzionale','pipeline_runs + Burr UI fino a M2. Langfuse via OpenTelemetry da M3. Hamilton UI solo se serve.'],
+ ['009','Nessun SQL dall\'LLM','DSL Pydantic con vocabolari generati dai registry, compilatore con parametri bindati.'],
+ ['010','confidence, coverage, pipeline_version obbligatori','Un sistema che afferma con sicurezza cose stimate al 40% è peggio di uno che non risponde.'],
+ ['011','Nessun Rust','Polars è già Rust.'],
+ ['012','10 ore a settimana per area, 20 settimane','M0 3 · M1 6 · M2 6 · M3 5. Le settimane sono modificabili nella pagina Milestone e il budget si confronta con la board.']];
+(function(){var host=document.getElementById('adrs');ADR.forEach(function(a){host.appendChild(h('div','adr'+(a[3]==='open'?' open':''),'<span class="n">ADR-'+a[0]+'</span><div><b>'+a[1]+'</b><span>'+a[2]+'</span></div>'));});})();
+var PRE=[['repo','Repo GitHub con branch protection su main e CI vuota verde'],['bucket','Bucket S3 condiviso (R2 o S3): il canale del passaggio dati tra le aree'],['kaggle','Account Kaggle verificato per la GPU'],['llm','API key del provider LLM primario e di uno secondario'],['annot','Progetto di annotazione a 4 classi (Roboflow o CVAT)'],['video','1 partita per lo sviluppo + 5 per l\'annotazione, scaricate'],['env','make dev verde su entrambe le macchine'],['adr','ADR ratificate, inclusa la 006 decisa a voce']];
+(function(){var host=document.getElementById('prereq'),st=store.get('prereq',{});function paint(){host.innerHTML='';PRE.forEach(function(p){var b=h('button',st[p[0]]?'on':'','<i>'+(st[p[0]]?'✓':'')+'</i><span>'+p[1]+'</span>');b.addEventListener('click',function(){st[p[0]]=!st[p[0]];store.set('prereq',st);paint();});host.appendChild(b);});}paint();})();
+
+go((location.hash.replace(/^#\/?/,'')||'home').split('?')[0]);
+})();
+</script>
+</body>
+</html>
