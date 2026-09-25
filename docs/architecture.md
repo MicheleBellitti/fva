@@ -74,37 +74,49 @@ Questo è anche ciò che rende il progetto parallelizzabile su due persone: Dev 
 
 Congelatelo per primo. Ogni modifica successiva costa il doppio.
 
+**Fonte di verità: [`docs/schema.md`](schema.md).** Qui sotto c'è solo la forma; tipi, vincoli, enum, coordinate e chi scrive cosa stanno lì.
+
 ```sql
 -- Postgres: piccolo, interrogabile, transazionale
-matches(id, competition, date, home_team, away_team,
-        video_uri, duration_s, fps, pitch_length_m, pitch_width_m,
+matches(id, competition, date, home_team, away_team, team_a_side,
+        video_uri, hls_uri, duration_s, fps,
         camera_type,        -- 'broadcast' | 'tactical_fixed'
-        status, pipeline_version)
+        half1_kickoff_s, half1_end_s, half2_kickoff_s, half2_end_s,
+        status, active_pipeline_version)
 
-video_segments(match_id, t_start, t_end,
-               view_type,   -- 'tactical' | 'replay' | 'closeup' | 'crowd' | 'unknown'
-               usable)      -- se l'omografia è affidabile in questo segmento
+team_orientation(match_id, team, half, attack_direction)
 
-possessions(id, match_id, t_start, t_end, team,
-            start_zone, end_zone, outcome, n_passes)
+video_segments(match_id, pipeline_version, t_start, t_end,
+               view_type,   -- tactical | replay | closeup | crowd | graphic | unknown
+               usable,      -- se l'omografia è affidabile in questo segmento
+               half, clock_start, clock_end)
 
-events(id, match_id, t_start, t_end, type, team,
-       x_pitch, y_pitch,
-       attrs JSONB,         -- campi specifici per tipo
-       confidence REAL,     -- 0-1
+possessions(id, match_id, pipeline_version, team, t_start, t_end,
+            half, clock_start, clock_end, x_start, y_start, x_end, y_end,
+            outcome, n_passes, source, confidence)
+
+events(id, match_id, pipeline_version, type, team,
+       t_video, t_end,      -- t_video = dove salta il player
+       half, match_clock, x_pitch, y_pitch,
+       attrs JSONB,         -- diagnostica; nessuna chiave di contratto in v1
+       confidence,          -- 0-1, NOT NULL
        source,              -- 'detector' | 'derived' | 'manual'
-       pipeline_version)
+       status, revision)    -- 'confirmed' e 1 fino a M4
 
-event_embeddings(event_id, vector)   -- pgvector, per "momenti simili"
+event_embeddings(event_id, pipeline_version, model, embedding)   -- pgvector
 
-team_metrics(match_id, team, window_start, window_end,
+team_metrics(match_id, pipeline_version, team, half, window_start, window_end,
              metric, value, coverage)   -- coverage = frazione di frame osservabili
+
+-- operative: jobs (coda SKIP LOCKED), pipeline_runs, feedback,
+--            burr_state (del persister Burr), eval_cases, eval_runs
 ```
 
 ```
 -- Parquet su object storage: grande, colonnare, non serve in Postgres
-tracks/match_id=<id>/part-*.parquet
-  frame, t, track_id, class, team, x_img, y_img, x_pitch, y_pitch, conf, homography_ok
+tracks/match_id=<id>/pipeline_version=<pv>/part-*.parquet
+  frame, t_video, half, match_clock, track_id, cls, team,
+  x_img, y_img, x_pitch, y_pitch, conf, h_ok
 ```
 
 **Tre campi non negoziabili, e la ragione:**
