@@ -131,10 +131,14 @@ detections/match_id=X/pv=Y/*.parquet possessions
 homography/match_id=X/pv=Y/*.parquet events                         disco locale in dev,
 weights/{model}/{sha}.pt             team_metrics                   S3 in prod
                                      event_embeddings (vector)
+                                     jobs (coda SKIP LOCKED)
+                                     pipeline_runs
                                      feedback
                                      eval_runs, eval_cases
                                      burr_state
 ```
+
+Il contratto, tabella per tabella, è in [`docs/schema.md`](schema.md): §3.2 e §3.3 qui sotto ne sono la sintesi e, in caso di conflitto, vince `schema.md`.
 
 **Perché il tracking non va in Postgres**: 800k righe per partita × 20 partite = 16M righe in un mese. Postgres le regge, ma ogni query analitica scansiona tutto. Parquet partizionato con Polars lazy legge 60 MB in 200 ms. E non serve mai interrogare il tracking per riga singola.
 
@@ -152,94 +156,33 @@ tracks/
 
 Hive-style, così Polars fa predicate pushdown su `match_id` e `pipeline_version` senza leggere i file. Una nuova versione della pipeline scrive in una nuova partizione: **i vecchi risultati non vengono sovrascritti**, e potete confrontare le versioni.
 
-Schema Parquet dei track finali:
+Schema Parquet dei track finali (dettagli e invarianti in `schema.md` §4.1):
 
 ```
 frame        u32
-t_video      f32       secondi dall'inizio del file
-half         u8
+t_video      f32       secondi dall'inizio di source.mp4
+half         u8        1 · 2 (solo frame dentro un tempo)
 match_clock  f32       secondi di gioco, dal kickoff del tempo
-track_id     u32
+track_id     u32       NON è un giocatore: unico solo per match + versione
 cls          u8        0 player · 1 gk · 2 referee · 3 ball
-team         u8        0 A · 1 B · 255 n/a
-x_img, y_img f32
-x_pitch      f32       metri, orientamento normalizzato
-y_pitch      f32
+team         u8?       0 A · 1 B · NULL n/a
+x_img, y_img f32       pixel 1080p: piedi per le persone, centro per la palla
+x_pitch      f32?      metri, orientamento normalizzato; NULL se !h_ok
+y_pitch      f32?
 conf         f32
 h_ok         bool      omografia accettata su questo frame
 ```
 
-### 3.3 Postgres: le tabelle con i campi aggiunti
+### 3.3 Postgres: le tabelle
 
-```sql
-CREATE TABLE matches (
-  id            text PRIMARY KEY,
-  competition   text, date date,
-  home_team     text, away_team   text,
-  video_uri     text, hls_uri     text,
-  duration_s    real, fps         real,
-  camera_type   text CHECK (camera_type IN ('broadcast','tactical_fixed')),
-  -- allineamento orologio
-  half1_kickoff_s real, half1_end_s real,
-  half2_kickoff_s real, half2_end_s real,
-  status        text, pipeline_version text
-);
+La DDL completa (colonne, tipi, vincoli, indici, chi scrive e chi legge) è in [`docs/schema.md`](schema.md) §5, e la migrazione iniziale (S0.3) la traduce 1:1. Qui restano le scelte che contano per chi implementa:
 
-CREATE TABLE team_orientation (
-  match_id text REFERENCES matches, team smallint, half smallint,
-  attack_direction smallint CHECK (attack_direction IN (-1, 1)),
-  PRIMARY KEY (match_id, team, half)
-);
-
-CREATE TABLE video_segments (
-  match_id text REFERENCES matches,
-  t_start real, t_end real,
-  view_type text,             -- tactical | replay | closeup | crowd | graphic
-  usable boolean,
-  half smallint, clock_start real, clock_end real
-);
-
-CREATE TABLE events (
-  id          text PRIMARY KEY,
-  match_id    text REFERENCES matches,
-  type        text NOT NULL,
-  team        smallint,
-  t_video     real NOT NULL,
-  t_end       real,
-  half        smallint, match_clock real,
-  x_pitch     real, y_pitch real,
-  attrs       jsonb,
-  confidence  real,
-  source      text,           -- detector | derived | manual
-  status      text DEFAULT 'confirmed',   -- provisional | confirmed | retracted
-  revision    int  DEFAULT 1,
-  pipeline_version text
-);
-CREATE INDEX ON events (match_id, type, half);
-CREATE INDEX ON events (match_id, t_video);
-
-CREATE TABLE team_metrics (
-  match_id text, team smallint, half smallint,
-  window_start real, window_end real,
-  metric text, value real,
-  coverage real,              -- frazione di frame osservabili nella finestra
-  pipeline_version text
-);
-
-CREATE TABLE event_embeddings (
-  event_id text PRIMARY KEY REFERENCES events,
-  embedding vector(768)
-);
-
-CREATE TABLE feedback (
-  id serial PRIMARY KEY, ts timestamptz DEFAULT now(),
-  conversation_id text, turn int,
-  query_text text, structured_query jsonb,
-  returned_event_ids text[],
-  rating smallint,            -- -1 | +1
-  note text
-);
-```
+- **Versioni affiancate.** Ogni tabella della timeline ha `pipeline_version NOT NULL`. D12 riscrive (`match_id`, `pipeline_version`) in una transazione e poi sposta `matches.active_pipeline_version`; chi legge filtra sempre sulla versione attiva (`schema.md` §6).
+- **`events`**: `t_video NOT NULL` è il punto di seek, `t_end` è NULL per gli eventi puntuali; `confidence NOT NULL`; `status = 'confirmed'` e `revision = 1` imposti da un `CHECK` fino a M4.
+- **`possessions`**: coordinate di inizio e fine, non zone; le zone sono predicati (`schema.md` §2.4).
+- **`team_metrics`**: finestre da 300 s di `match_clock` per tempo; `coverage NOT NULL`, e `value` è NULL se e solo se `coverage = 0`.
+- **`jobs`**: coda con `FOR UPDATE SKIP LOCKED` e al più un job attivo per partita.
+- **`burr_state`**: la crea il persister di Burr, non Alembic.
 
 `feedback` è la tabella da cui cresce l'eval set: ogni pollice giù è un caso candidato.
 
@@ -289,7 +232,7 @@ I4 e I5 sono i due "buchi seri" chiusi con trenta secondi di lavoro umano per pa
 
 **Il frame loop vive in P1 e P4** come generatori. I nodi P5-P6 consumano il generatore a batch. Hamilton non vede mai un nodo per frame.
 
-**Convenzioni**: cls 0-3 come `IntEnum` in `core`; coordinate immagine in pixel del frame 1080p; coordinate campo in metri con origine nell'angolo in basso a sinistra del campo *nel sistema normalizzato* (squadra analizzata attacca verso +x).
+**Convenzioni** (`schema.md` §2): cls 0-3 come `IntEnum` in `core`; coordinate immagine in pixel del frame 1080p; coordinate campo in metri sul campo canonico 105×68, con origine nell'angolo in basso a sinistra *nel sistema normalizzato* (la squadra A attacca verso +x). La normalizzazione è una rotazione di 180° (`x' = 105 − x`, `y' = 68 − y`), non uno specchio.
 
 ### DAG di derivazione
 
@@ -415,7 +358,7 @@ Persistenza su Postgres con `conversation_id` come chiave; ogni turno è un'appl
 from typing import Literal, Annotated, Union
 from pydantic import BaseModel, Field
 
-# generato dal registry dei detector — l'LLM può chiedere solo ciò che esiste
+# dagli enum di core (ADR-013) — l'LLM può chiedere solo ciò che esiste
 EventType = Literal[
     "corner",
     "throw_in",
@@ -434,7 +377,6 @@ MetricName = Literal[
     "team_width",
     "compactness",
     "possession_share",
-    "recoveries_by_zone",
     "ppda_proxy",
 ]
 
@@ -500,34 +442,32 @@ Query = Annotated[
 ```python
 def compile_find_moments(q: FindMoments) -> tuple[str, dict]:
     sql = """
-      SELECT id, match_id, type, team, t_video, half, match_clock,
-             x_pitch, y_pitch, confidence
-      FROM events
-      WHERE match_id = ANY(:match_ids) AND type = ANY(:types)
-        AND confidence >= :minc AND status <> 'retracted'
+      SELECT e.id, e.match_id, e.type, e.team, e.t_video, e.half, e.match_clock,
+             e.x_pitch, e.y_pitch, e.confidence
+      FROM events e
+      JOIN matches m ON m.id = e.match_id
+                    AND e.pipeline_version = m.active_pipeline_version
+      WHERE e.match_id = ANY(:match_ids) AND e.type = ANY(:types)
+        AND e.confidence >= :minc AND e.status <> 'retracted'
     """
     params = {"match_ids": q.match_ids, "types": q.event_types, "minc": q.min_confidence}
     if q.team != "both":
-        sql += " AND team = :team"
+        sql += " AND e.team = :team"
         params["team"] = 0 if q.team == "A" else 1
     if q.zone:
         sql += f" AND {ZONE_PREDICATES[q.zone]}"  # predicati fissi, non input
     if q.time:
         sql, params = apply_time_window(sql, params, q.time)
-    sql += " ORDER BY t_video LIMIT :limit"
+    sql += " ORDER BY e.t_video LIMIT :limit"
     params["limit"] = q.limit
     return sql, params
 ```
 
 **Le tre proprietà di sicurezza**: la sintassi SQL è nel compilatore, non nell'LLM; i valori passano come parametri bindati; i vocabolari sono `Literal` generati dal codice, quindi un evento che non esiste è un errore Pydantic prima di toccare il database.
 
-**`EventType` si genera dal registry** a import time:
+**`EventType` e `MetricName` vivono in `core`** come `StrEnum` (ADR-013), e il DSL ne ricava i `Literal`. Il registry dei detector, quando arriva (P2.4), si valida contro l'enum: un detector con un tipo sconosciuto fallisce all'import, e `test_graphs` verifica che ogni tipo abbia il suo detector. Aggiungere un tipo di evento è una modifica al contratto: enum, migrazione e `schema.md`.
 
-```python
-EventType = Literal[tuple(sorted(DETECTORS))]  # type: ignore[valid-type]
-```
-
-Aggiungete un detector, e l'assistente lo sa senza toccare nient'altro.
+---
 
 ### 5.3 L'astrazione sul provider
 
