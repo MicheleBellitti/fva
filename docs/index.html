@@ -247,9 +247,9 @@ half         u8
 match_clock  f32   secondi dal kickoff del tempo
 track_id     u32   NON è un giocatore: cambia alle uscite
 cls          u8    Cls enum
-team         u8    Team enum
+team         u8    Team enum · NULL = n/a
 x_img y_img  f32   pixel, frame 1080p
-x_pitch      f32   metri, orientamento normalizzato
+x_pitch      f32   metri, normalizzato · NULL se !h_ok
 y_pitch      f32
 conf         f32
 h_ok         bool  omografia accettata</code></pre></div>
@@ -261,20 +261,27 @@ class Cls(IntEnum):
     PLAYER = 0; GOALKEEPER = 1; REFEREE = 2; BALL = 3
 
 class Team(IntEnum):
-    A = 0; B = 1; NA = 255        # A = squadra analizzata
+    A = 0; B = 1                  # A = matches.team_a_side · n/a = NULL
 
 class ViewType(StrEnum):
-    TACTICAL = "tactical"; REPLAY = "replay"
-    CLOSEUP = "closeup"; CROWD = "crowd"; GRAPHIC = "graphic"
+    TACTICAL = "tactical"; REPLAY = "replay"; CLOSEUP = "closeup"
+    CROWD = "crowd"; GRAPHIC = "graphic"; UNKNOWN = "unknown"
+
+class EventType(StrEnum):         # ADR-013: il registry si valida contro
+    CORNER = "corner"; THROW_IN = "throw_in"; SHOT = "shot"
+    ...                           # 10 tipi, schema.md §3.3
 
 class EventStatus(StrEnum):
     PROVISIONAL = "provisional"; CONFIRMED = "confirmed"
-    RETRACTED = "retracted"      # M0–M3: sempre confirmed</code></pre>
+    RETRACTED = "retracted"      # fino a M4: sempre confirmed
+
+# elenco completo: docs/schema.md §3</code></pre>
   <pre><code># Coordinate campo
 PITCH_L, PITCH_W = 105.0, 68.0
 # origine in basso a sinistra; la squadra A attacca SEMPRE verso +x
 # in entrambi i tempi. La normalizzazione avviene in pitch_tracks
-# usando team_orientation(match, team, half).attack_direction</code></pre></div>
+# usando team_orientation(match, team, half).attack_direction ed è
+# una rotazione di 180° (x' = 105 − x, y' = 68 − y), non uno specchio</code></pre></div>
   <div class="pitchbox"><svg viewBox="0 0 420 300"><rect width="420" height="300" fill="#0F1B16"/><g class="pl"><rect x="40" y="40" width="340" height="220"/><line x1="210" y1="40" x2="210" y2="260"/><circle cx="210" cy="150" r="36"/><rect x="40" y="92" width="48" height="116"/><rect x="332" y="92" width="48" height="116"/></g>
     <line x1="40" y1="260" x2="120" y2="260" stroke="var(--p)" stroke-width="2"/><polygon points="120,255 130,260 120,265" fill="var(--p)"/><text x="60" y="280" fill="var(--p)" class="pt" style="font-size:12px">x → 105 m</text>
     <line x1="40" y1="260" x2="40" y2="180" stroke="var(--p)" stroke-width="2"/><polygon points="35,180 40,170 45,180" fill="var(--p)"/><text x="48" y="175" fill="var(--p)" class="pt" style="font-size:12px">y ↑ 68 m</text>
@@ -282,10 +289,10 @@ PITCH_L, PITCH_W = 105.0, 68.0
     <text x="300" y="150" fill="var(--p)" class="pt" text-anchor="middle" style="font-size:14px">A attacca →</text><text x="120" y="150" fill="var(--s)" class="pt" text-anchor="middle" style="font-size:14px">← B attacca</text>
     <text x="210" y="28" fill="var(--muted)" class="pt" text-anchor="middle" style="font-size:11px">sistema normalizzato · vale per entrambi i tempi</text></svg></div></div>
   <h3 data-area="s">DSL di query <span class="tag s">assistente</span></h3>
-  <div data-area="s"><p>L'LLM sceglie tra opzioni chiuse, non scrive. <code>EventType</code> e <code>MetricName</code> sono generati dai registry: un detector nuovo è visibile all'assistente senza toccare altro.</p>
+  <div data-area="s"><p>L'LLM sceglie tra opzioni chiuse, non scrive. <code>EventType</code> e <code>MetricName</code> sono enum in <code>core</code> (ADR-013): il DSL ne ricava i <code>Literal</code>, e i registry dei detector e delle metriche si validano contro di loro.</p>
   <div class="tabs" role="tablist"><span class="tind"></span><button class="tab" role="tab" aria-selected="true" data-pane="q1">Modelli</button><button class="tab" role="tab" data-pane="q2">Compilatore</button><button class="tab" role="tab" data-pane="q3">Risposta</button></div>
-  <div class="tabpane" id="q1"><pre><code>EventType  = Literal[tuple(sorted(DETECTORS))]        # dal registry
-MetricName = Literal[tuple(sorted(METRICS))]
+  <div class="tabpane" id="q1"><pre><code>EventType  = Literal[tuple(e.value for e in core.EventType)]   # ADR-013
+MetricName = Literal[tuple(m.value for m in core.MetricName)]
 Zone = Literal["defensive_third","middle_third","final_third",
                "left_flank","center","right_flank","box"]
 
@@ -324,20 +331,21 @@ class SimilarMoments(BaseModel):
 Query = Annotated[Union[FindMoments, ComputeMetric, CompareMatches,
                         SimilarMoments], Field(discriminator="intent")]</code></pre></div>
   <div class="tabpane" id="q2" hidden><pre><code>def compile_find_moments(q: FindMoments) -> tuple[str, dict]:
-    sql = """SELECT id, match_id, type, team, t_video, half, match_clock,
-                    x_pitch, y_pitch, confidence
-             FROM events
-             WHERE match_id = ANY(:match_ids) AND type = ANY(:types)
-               AND confidence >= :minc AND status <> 'retracted'"""
+    sql = """SELECT e.id, e.match_id, e.type, e.team, e.t_video, e.half,
+                    e.match_clock, e.x_pitch, e.y_pitch, e.confidence
+             FROM events e JOIN matches m ON m.id = e.match_id
+                  AND e.pipeline_version = m.active_pipeline_version
+             WHERE e.match_id = ANY(:match_ids) AND e.type = ANY(:types)
+               AND e.confidence >= :minc AND e.status <> 'retracted'"""
     params = {"match_ids": q.match_ids, "types": q.event_types,
               "minc": q.min_confidence}
     if q.team != "both":
-        sql += " AND team = :team"; params["team"] = int(Team[q.team])
+        sql += " AND e.team = :team"; params["team"] = int(Team[q.team])
     if q.zone:
         sql += f" AND {ZONE_PREDICATES[q.zone]}"   # predicati fissi
     if q.time:
         sql, params = apply_time_window(sql, params, q.time)
-    sql += " ORDER BY t_video LIMIT :limit"; params["limit"] = q.limit
+    sql += " ORDER BY e.t_video LIMIT :limit"; params["limit"] = q.limit
     return sql, params
 
 # la sintassi è nel compilatore, i valori sono bindati,
@@ -503,18 +511,18 @@ var EDGES=[['intake','s3','video, HLS','w'],['intake','pg','matches, orientament
 
 /* ================= SCHEMA ================= */
 var T=[
- {n:'matches',w:'Intake',r:'worker, API, web',why:'Una riga per partita. Contiene le ancore dell\'orologio e il tipo di camera che seleziona la variante del DAG.',c:[['id','text','pk · es. m_2026_09_12_nap_juv',1],['competition, date','',''],['home_team, away_team','text',''],['video_uri, hls_uri','text','bucket'],['duration_s, fps','real',''],['camera_type','text','broadcast | tactical_fixed',1],['half1_kickoff_s, half1_end_s','real','ancora video ↔ orologio, tempo 1',1],['half2_kickoff_s, half2_end_s','real','tempo 2',1],['status','text','queued | processing | ready | failed'],['pipeline_version','text','',1]]},
- {n:'team_orientation',w:'Intake (M1) · worker (M3)',r:'worker',why:'Quale squadra attacca dove, per tempo. Senza, sommare i due tempi produce numeri privi di senso.',c:[['match_id, team, half','','pk composta',1],['attack_direction','smallint','+1 | −1',1]]},
- {n:'video_segments',w:'worker',r:'worker, web',why:'Segmentazione per tipo di inquadratura. Solo i segmenti usable alimentano omografia e metriche.',c:[['match_id','text','fk'],['t_start, t_end','real',''],['view_type','text','ViewType',1],['usable','boolean','',1],['half, clock_start, clock_end','','']]},
- {n:'possessions',w:'worker',r:'worker, API',why:'Run di possesso per squadra, con isteresi. Base di tutti gli eventi.',c:[['id','text','pk'],['match_id','text','fk'],['t_start, t_end','real',''],['team','smallint',''],['start_zone, end_zone','text','Zone'],['outcome','text',''],['source','text','ball | fallback',1],['confidence','real','',1]]},
- {n:'events',w:'worker',r:'API, web',why:'Il cuore. Poche migliaia per partita, interrogabili in ogni modo, mutabili in M4.',c:[['id','text','pk · evt_…',1],['match_id','text','fk'],['type','text','EventType, dal registry',1],['team','smallint',''],['t_video','real','dove salta il player',1],['t_end','real',''],['half, match_clock','','',1],['x_pitch, y_pitch','real','metri normalizzati'],['attrs','jsonb','campi per tipo'],['confidence','real','0–1',1],['source','text','detector | derived | manual'],['status','text','confirmed fino a M3',1],['revision','int','',1],['pipeline_version','text','',1]]},
- {n:'team_metrics',w:'worker',r:'API',why:'Aggregati per finestra. La coverage dice su quanti frame è calcolato il numero.',c:[['match_id, team, half','',''],['window_start, window_end','real','finestre da 5\''],['metric','text','MetricName'],['value','real',''],['coverage','real','frazione di frame con ≥7 visibili',1],['pipeline_version','text','',1]]},
- {n:'event_embeddings',w:'worker',r:'API',why:'Vettori per "momenti simili". pgvector, HNSW.',c:[['event_id','text','pk, fk'],['embedding','vector(768)','']]},
- {n:'jobs',w:'Intake, API',r:'worker',why:'La coda. SELECT … FOR UPDATE SKIP LOCKED. Chiunque accoda, il worker consuma.',c:[['id','serial','pk'],['match_id','text','fk'],['kind','text','ingest | reprocess'],['status','text','queued | running | done | failed'],['locked_at, finished_at','',''],['error','text','']]},
- {n:'feedback',w:'API',r:'eval',why:'Da qui cresce l\'eval set. Ogni pollice giù è un caso candidato.',c:[['id, ts','',''],['conversation_id, turn','',''],['query_text','text',''],['structured_query','jsonb',''],['returned_event_ids','text[]',''],['rating','smallint','−1 | +1'],['note','text','']]},
- {n:'pipeline_runs',w:'worker',r:'chi debugga',why:'Observability della percezione senza UI. Scritta da un adapter Hamilton.',c:[['run_id, match_id','',''],['node','text',''],['started, duration_s','',''],['rows_out','int',''],['checks','jsonb','esito dei @check_output'],['pipeline_version, config','','']]},
- {n:'burr_state',w:'API',r:'API, Burr UI',why:'Stato delle conversazioni, gestito dal persister di Burr.',c:[['app_id','text','= conversation_id'],['partition_key, sequence_id','',''],['state','jsonb',''],['position','text','azione corrente']]},
- {n:'eval_cases · eval_runs',w:'chi cura l\'eval',r:'CI',why:'Golden set e risultati, per entrambi gli harness.',c:[['case_id','text',''],['kind','text','perception | assistant'],['input, expected','jsonb',''],['run_id, score, details','','']]}];
+ {n:'matches',w:'Intake · CLI allineamento · worker (status, versione attiva)',r:'worker, API, assistente, web',why:'Una riga per partita. Ancore dell\'orologio, tipo di camera che seleziona la variante del DAG, puntatore alla versione attiva della timeline.',c:[['id','text','pk · m_2026_09_12_nap_juv',1],['competition, date','text, date','date NOT NULL'],['home_team, away_team','text',''],['team_a_side','text','home | away · chi è la squadra A',1],['video_uri, hls_uri','text','bucket'],['duration_s, fps','real','> 0'],['camera_type','text','broadcast | tactical_fixed',1],['half1_kickoff_s, half1_end_s','real','ancora video ↔ orologio, tempo 1',1],['half2_kickoff_s, half2_end_s','real','tempo 2',1],['status','text','queued | processing | ready | failed'],['active_pipeline_version','text','versione che i lettori vedono; NULL = nessuna timeline'],['created_at','timestamptz','']]},
+ {n:'team_orientation',w:'CLI allineamento (M1) · worker (M3)',r:'worker',why:'Quale squadra attacca dove, per tempo, nel sistema grezzo della camera. Senza, sommare i due tempi produce numeri privi di senso. È un input della pipeline: niente pipeline_version.',c:[['match_id, team, half','','pk composta',1],['attack_direction','smallint','+1 | −1',1]]},
+ {n:'video_segments',w:'worker',r:'web, API',why:'Segmentazione per tipo di inquadratura. Solo i segmenti usable alimentano omografia e metriche.',c:[['match_id','text','fk'],['pipeline_version','text','NOT NULL',1],['t_start, t_end','real','dominio video'],['view_type','text','ViewType',1],['usable','boolean','solo se tactical',1],['half, clock_start, clock_end','','NULL fuori dai tempi']]},
+ {n:'possessions',w:'worker',r:'assistente, API',why:'Run di possesso per squadra, con isteresi. Base di eventi e possession_share. Coordinate, non zone: le zone si sovrappongono.',c:[['id','text','pk · pos_…'],['match_id','text','fk'],['pipeline_version','text','NOT NULL',1],['team','smallint','A | B'],['t_start, t_end','real',''],['half, clock_start, clock_end','',''],['x/y_start, x/y_end','real','NULL se palla ignota'],['outcome','text','PossessionOutcome'],['n_passes','smallint',''],['source','text','ball | fallback',1],['confidence','real','0–1 · 0.4 fallback',1]]},
+ {n:'events',w:'worker',r:'assistente, API, web',why:'Il cuore. Poche migliaia per partita, interrogabili in ogni modo, mutabili in M4.',c:[['id','text','pk · evt_ + 12, deterministico',1],['match_id','text','fk'],['pipeline_version','text','NOT NULL',1],['type','text','EventType, enum in core (ADR-013)',1],['team','smallint','NULL = non attribuibile'],['t_video','real','dove salta il player',1],['t_end','real','NULL = puntuale'],['half, match_clock','','',1],['x_pitch, y_pitch','real','metri normalizzati'],['attrs','jsonb','diagnostica, nessuna chiave di contratto in v1'],['confidence','real','0–1',1],['source','text','detector | derived | manual'],['status','text','confirmed fino a M4 (CHECK)',1],['revision','int','1 fino a M4',1]]},
+ {n:'team_metrics',w:'worker',r:'assistente, API',why:'Aggregati per finestra di gioco. La coverage dice su quanti frame è calcolato il numero.',c:[['match_id, team, half','',''],['pipeline_version','text','NOT NULL',1],['window_start, window_end','real','match_clock, finestre da 300 s'],['metric','text','MetricName'],['value','real','NULL ⇔ coverage = 0'],['coverage','real','frazione di frame osservabili',1]]},
+ {n:'event_embeddings',w:'worker (M3)',r:'assistente',why:'Vettori per "momenti simili". pgvector, HNSW coseno. Si confrontano solo vettori dello stesso model.',c:[['event_id','text','pk, fk'],['pipeline_version','text','NOT NULL',1],['model','text',''],['embedding','vector(768)','']]},
+ {n:'jobs',w:'Intake, API · worker (stato)',r:'worker',why:'La coda. SELECT … FOR UPDATE SKIP LOCKED. Al più un job attivo per partita: rende idempotente l\'intake.',c:[['id','bigint','pk identity'],['match_id','text','fk'],['kind','text','ingest | reprocess'],['status','text','queued | running | done | failed'],['params','jsonb','override di config'],['attempts','smallint',''],['created_at, locked_at, locked_by, finished_at','',''],['error','text','solo se failed']]},
+ {n:'pipeline_runs',w:'worker',r:'chi debugga',why:'Observability della percezione senza UI. Una riga per nodo, scritta da un adapter Hamilton.',c:[['run_id','uuid',''],['job_id, match_id','','fk'],['pipeline_version','text','NOT NULL',1],['node','text',''],['started_at, duration_s','',''],['ok, error','',''],['rows_out','bigint',''],['checks','jsonb','esito dei @check_output'],['config','jsonb','config risolta']]},
+ {n:'feedback',w:'API',r:'eval',why:'Da qui cresce l\'eval set. Ogni pollice giù è un caso candidato.',c:[['id, ts','',''],['conversation_id, turn','','unique'],['query_text','text',''],['structured_query','jsonb',''],['returned_event_ids','text[]',''],['rating','smallint','−1 | +1'],['note','text','']]},
+ {n:'burr_state',w:'persister Burr (API)',r:'API, Burr UI',why:'Stato delle conversazioni. La tabella è del persister di Burr, non di Alembic: nessun SQL nostro.',c:[['app_id','text','= conversation_id'],['partition_key, sequence_id, position','','pk'],['status','text',''],['state','jsonb','chiavi S.* — contratto del replay']]},
+ {n:'eval_cases · eval_runs',w:'chi cura l\'eval · runner CI',r:'CI',why:'Golden set e risultati. La fonte dei casi sono i file in eval/; la tabella li materializza, più i candidati dal feedback.',c:[['case_id','text','pk'],['kind, status','text','perception | assistant · candidate | active | retired'],['input, expected, content_hash','',''],['run_id, git_sha, score, passed, details','',''],['pipeline_version','text','NOT NULL',1]]}];
 (function(){var list=document.getElementById('tlist'),det=document.getElementById('tdet');
   T.forEach(function(t,i){var b=h('button',null,t.n);b.addEventListener('click',function(){show(i);});list.appendChild(b);});
   function show(i){list.querySelectorAll('button').forEach(function(b,j){b.classList.toggle('on',i===j);});var t=T[i];
@@ -696,7 +704,8 @@ var ADR=[['001','Broadcast come tipo di camera primario','Serie A è l\'obiettiv
  ['009','Nessun SQL dall\'LLM','DSL Pydantic con vocabolari generati dai registry, compilatore con parametri bindati.'],
  ['010','confidence, coverage, pipeline_version obbligatori','Un sistema che afferma con sicurezza cose stimate al 40% è peggio di uno che non risponde.'],
  ['011','Nessun Rust','Polars è già Rust.'],
- ['012','10 ore a settimana per area, 20 settimane','M0 3 · M1 6 · M2 6 · M3 5. Le settimane sono modificabili nella pagina Milestone e il budget si confronta con la board.']];
+ ['012','10 ore a settimana per area, 20 settimane','M0 3 · M1 6 · M2 6 · M3 5. Le settimane sono modificabili nella pagina Milestone e il budget si confronta con la board.'],
+ ['013','I vocabolari chiusi vivono in core','Proposta. EventType e MetricName sono enum in packages/core da M0; il DSL e la migrazione li usano, i registry dei detector e delle metriche si validano contro di loro.','open']];
 (function(){var host=document.getElementById('adrs');ADR.forEach(function(a){host.appendChild(h('div','adr'+(a[3]==='open'?' open':''),'<span class="n">ADR-'+a[0]+'</span><div><b>'+a[1]+'</b><span>'+a[2]+'</span></div>'));});})();
 var PRE=[['repo','Repo GitHub con branch protection su main e CI vuota verde'],['bucket','Bucket S3 condiviso (R2 o S3): il canale del passaggio dati tra le aree'],['kaggle','Account Kaggle verificato per la GPU'],['llm','API key del provider LLM primario e di uno secondario'],['annot','Progetto di annotazione a 4 classi (Roboflow o CVAT)'],['video','1 partita per lo sviluppo + 5 per l\'annotazione, scaricate'],['env','make dev verde su entrambe le macchine'],['adr','ADR ratificate, inclusa la 006 decisa a voce']];
 (function(){var host=document.getElementById('prereq'),st=store.get('prereq',{});function paint(){host.innerHTML='';PRE.forEach(function(p){var b=h('button',st[p[0]]?'on':'','<i>'+(st[p[0]]?'✓':'')+'</i><span>'+p[1]+'</span>');b.addEventListener('click',function(){st[p[0]]=!st[p[0]];store.set('prereq',st);paint();});host.appendChild(b);});}paint();})();
