@@ -396,7 +396,7 @@ class S:
 
 | Azione | reads | writes | LLM? | Cosa fa |
 |---|---|---|---|---|
-| `classify_intent` | QUERY_TEXT, MESSAGES, MATCH_CONTEXT | INTENT, NEEDS_CLARIF, CLARIF_Q | sì, piccolo | structured output: `{intent, needs_clarification, question}`. Intent ∈ {find_moments, compute_metric, compare, report, chitchat} |
+| `classify_intent` | QUERY_TEXT, MESSAGES, MATCH_CONTEXT | INTENT, NEEDS_CLARIF, CLARIF_Q | sì, piccolo | structured output: `{intent, needs_clarification, question}`. Intent ∈ `INTENTS` di `assistant.dsl`: {find_moments, compute_metric, compare, similar, report, chitchat}. I primi quattro producono una `Query`; `report` ne compone più d'una, `chitchat` nessuna |
 | `ask_clarification` | CLARIF_Q | MESSAGES | no | termina il turno con la domanda |
 | `resolve_context` | QUERY_TEXT, MESSAGES, MATCH_CONTEXT | RESOLVED_QUERY, MATCH_CONTEXT | sì, solo se follow-up | (1) fuzzy-match dei nomi squadra su `matches`; (2) "l'ultima partita" → match_id; (3) se la storia non è vuota, riscrittura in query autonoma |
 | `build_query` | RESOLVED_QUERY, INTENT, VALIDATION_ERR, QUERY_RETRIES | STRUCTURED, VALIDATION_ERR, QUERY_RETRIES | sì | structured output sul discriminated union `Query`. Su errore Pydantic: messaggio d'errore in contesto e retry (max 2) |
@@ -410,6 +410,8 @@ Persistenza su Postgres con `conversation_id` come chiave; ogni turno è un'appl
 ### 5.2 Il DSL di query
 
 È il pezzo che mancava. Il principio: **l'LLM sceglie tra opzioni chiuse, non scrive.**
+
+Implementazione: `packages/assistant/src/assistant/dsl.py`. Il codice qui sotto è lo schizzo originale; dove diverge, fa fede il modulo (vincoli aggiunti: `match_ids` mai vuoto, partite distinte in `compare`, `limit` in 1–100 ovunque, `clock_from_min ≤ clock_to_min`, `last_n_min` esclusivo con l'intervallo esplicito).
 
 ```python
 from typing import Literal, Annotated, Union
@@ -459,13 +461,13 @@ class FindMoments(BaseModel):
     zone: Zone | None = None
     time: TimeWindow | None = None
     min_confidence: float = Field(0.5, ge=0, le=1)
-    limit: int = Field(20, le=100)
+    limit: int = Field(20, ge=1, le=100)
     model_config = {"extra": "forbid"}
 
 
 class ComputeMetric(BaseModel):
     intent: Literal["compute_metric"]
-    match_ids: list[str]
+    match_ids: list[str] = Field(min_length=1)
     metric: MetricName
     team: Literal["A", "B"]
     time: TimeWindow | None = None
@@ -483,9 +485,9 @@ class CompareMatches(BaseModel):
 
 class SimilarMoments(BaseModel):
     intent: Literal["similar"]
-    anchor_event_id: str
-    match_ids: list[str] | None = None
-    limit: int = 10
+    anchor_event_id: str = Field(min_length=1)
+    match_ids: list[str] | None = Field(None, min_length=1)
+    limit: int = Field(10, ge=1, le=100)
     model_config = {"extra": "forbid"}
 
 

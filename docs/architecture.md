@@ -180,7 +180,7 @@ from burr.core import action, State, ApplicationBuilder
 
 @action(reads=["query", "match_context"], writes=["intent", "needs_clarification"])
 def classify_intent(state: State, llm) -> State:
-    """find_moments | compute_metric | compare_matches | generate_report | chitchat"""
+    """Intent (assistant.dsl): find_moments | compute_metric | compare | similar | report | chitchat"""
     ...
 
 
