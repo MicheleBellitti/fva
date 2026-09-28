@@ -51,8 +51,6 @@ Team = Literal["A", "B"]
 TeamFilter = Literal["A", "B", "both"]
 
 EVENT_TYPES: tuple[EventType, ...] = get_args(EventType)
-METRIC_NAMES: tuple[MetricName, ...] = get_args(MetricName)
-ZONES: tuple[Zone, ...] = get_args(Zone)
 QUERY_INTENTS: tuple[QueryIntent, ...] = get_args(QueryIntent)
 INTENTS: tuple[Intent, ...] = (*QUERY_INTENTS, *get_args(NonQueryIntent))
 
