@@ -7,6 +7,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from derivation import dataflow as derivation
 from hamilton import driver
 from perception import dataflow as perception
 from perception.config import Mode, PipelineConfig, load_config
@@ -50,6 +51,23 @@ PERCEPTION_INPUTS = {
     "pipeline_version",
     "tracks_root",
 }
+
+DERIVATION_NODES = {
+    "ball_track": "P2.1",
+    "ball_carrier": "P2.2",
+    "possessions": "P2.3",
+    "possessions_fallback": "P2.10",
+    "possessions_merged": "P2.10",
+    "team_shape": "P2.8",
+    "events_geometric": "P2.5",
+    "events_statistical": "P2.9",
+    "events": "P2.6",
+    "team_metrics": "P3.1",
+    "event_embeddings": "P3.2",
+    "persist": "P2.6",
+}
+
+DERIVATION_INPUTS = {"pitch_tracks", "registry", "text_embedder", "engine", "pipeline_version"}
 
 
 def build(module: ModuleType, cfg: PipelineConfig) -> driver.Driver:
@@ -121,3 +139,17 @@ PERCEPTION_STUBS = [
 def test_perception_stub_names_its_task(name: str, task: str) -> None:
     with pytest.raises(NotImplementedError, match=re.escape(task)):
         call_stub(getattr(perception, name))
+
+
+class TestDerivationDag:
+    def test_builds_with_every_node(self, cfg: PipelineConfig) -> None:
+        assert set(DERIVATION_NODES) <= node_names(build(derivation, cfg))
+
+    def test_external_inputs_are_exactly_the_expected_ones(self, cfg: PipelineConfig) -> None:
+        assert external_inputs(build(derivation, cfg), cfg) == DERIVATION_INPUTS
+
+
+@pytest.mark.parametrize(("name", "task"), DERIVATION_NODES.items())
+def test_derivation_stub_names_its_task(name: str, task: str) -> None:
+    with pytest.raises(NotImplementedError, match=re.escape(task)):
+        call_stub(getattr(derivation, name))
