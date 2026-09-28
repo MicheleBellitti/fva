@@ -1,0 +1,5 @@
+# Default della pipeline. Gli overlay sovrascrivono chiavi, non ne aggiungono.
+camera: broadcast
+mode: batch
+sample_fps: 10
+ball_tiling: true
