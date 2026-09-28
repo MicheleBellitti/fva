@@ -1,0 +1,4 @@
+# Live: meno frame e niente tile sulla palla, per stare nel budget di latenza.
+mode: live
+sample_fps: 5
+ball_tiling: false
