@@ -1,0 +1,84 @@
+name: fva
+
+services:
+  postgres:
+    image: docker.io/pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: fva
+      POSTGRES_PASSWORD: fva
+      POSTGRES_DB: fva
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fva -d fva"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # MinIO community è archiviato e le immagini ufficiali non si scaricano più.
+  # bitnamilegacy è congelata (maggio 2025): va bene solo come S3 di sviluppo.
+  minio:
+    image: docker.io/bitnamilegacy/minio:2025.5.24
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_DEFAULT_BUCKETS: fva
+    ports: ["9000:9000"]
+    volumes: ["miniodata:/bitnami/minio/data"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: { context: ., dockerfile: docker/api.Dockerfile }
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql+psycopg://fva:fva@postgres:5432/fva
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: fva
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+    env_file: [.env]
+    ports: ["8000:8000"]
+    volumes: ["./packages:/app/packages"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  burr-ui:
+    build: { context: ., dockerfile: docker/burr.Dockerfile }
+    ports: ["7241:7241"]
+    environment:
+      BURR_DB: postgresql://fva:fva@postgres:5432/fva
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # UI web per sfogliare il bucket (questa build di MinIO non ha la console)
+  s3-ui:
+    image: docker.io/cloudlena/s3manager:v0.11.0
+    environment:
+      ENDPOINT: minio:9000
+      ACCESS_KEY_ID: minioadmin
+      SECRET_ACCESS_KEY: minioadmin
+      USE_SSL: "false"
+    ports: ["9001:8080"]
+    depends_on:
+      minio: { condition: service_healthy }
+    profiles: ["tools"]
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm install && pnpm dev --port 3000 --hostname 0.0.0.0"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports: ["3000:3000"]
+    volumes: ["./apps/web:/app", "web_node_modules:/app/node_modules"]
+    profiles: ["web"]
+
+volumes:
+  pgdata:
+  miniodata:
+  web_node_modules:
