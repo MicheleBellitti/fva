@@ -74,7 +74,7 @@ Le zone **si sovrappongono** (un punto è in un terzo *e* in una fascia), quindi
 
 ## 3. Enum
 
-Vivono tutti in `packages/core/src/core/models/enums.py`. In Postgres ogni colonna categoriale è `text` (o `smallint` per gli `IntEnum`) con un `CHECK` generato **dall'enum stesso** nella migrazione, così i valori non si copiano a mano. Aggiungere un valore vuol dire modificare il contratto: enum + migrazione + questo file.
+Vivono tutti in `packages/core/src/core/models/enums.py`. In Postgres ogni colonna categoriale è `text` (o `smallint` per gli `IntEnum`) con un `CHECK`. In `tables.py` il `CHECK` è generato **dall'enum stesso**; ogni migrazione invece scrive i valori per esteso, congelati, perché una migrazione già applicata non deve cambiare quando cambia un enum. L'autogenerate di Alembic non confronta i `CHECK`: lo fa `tests/test_tables.py`, che fallisce finché migrazioni e `tables.py` non coincidono. Aggiungere un valore vuol dire modificare il contratto: enum + migrazione che rifà il `CHECK` + questo file.
 
 ### 3.1 Percezione
 

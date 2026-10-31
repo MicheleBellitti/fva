@@ -40,7 +40,6 @@ reportMissingTypeStubs = false
 # qualcosa che il nostro codice possa correggere.
 reportUnknownMemberType = false
 reportUnknownVariableType = false
-reportUnknownArgumentType = false
 reportUntypedFunctionDecorator = false
 
 [tool.pytest.ini_options]

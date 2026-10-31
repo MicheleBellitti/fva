@@ -1,8 +1,7 @@
 """Initial schema — all tables, constraints, pgvector, and indexes.
 
 Translates docs/schema.md §5 1:1 onto a blank Postgres database.
-The Vector type is emitted as a raw `vector(768)` column; pgvector is
-installed first via `CREATE EXTENSION IF NOT EXISTS vector`.
+pgvector is installed first via `CREATE EXTENSION IF NOT EXISTS vector`.
 
 Revision ID: 0001_initial_schema
 Revises:
@@ -12,45 +11,59 @@ Create Date: 2026-10-26 23:25:00
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
-from core.models.enums import (
-    CameraType,
-    EvalCaseStatus,
-    EvalKind,
-    EventSource,
-    EventStatus,
-    EventType,
-    JobKind,
-    JobStatus,
-    MatchStatus,
-    MetricName,
-    PossessionOutcome,
-    PossessionSource,
-    Team,
-    TeamSide,
-    ViewType,
-)
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0001_initial_schema"
-down_revision: str | None = None
+down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
 # ---------------------------------------------------------------------------
-# Helper — build CHECK literal list from enum without hardcoding strings
+# Values frozen at this revision.  A migration never imports core.models: an
+# applied migration must not change when an enum does.  Adding an enum value
+# means a new migration that drops and recreates the CHECK; tests/test_tables.py
+# fails until the migrations and tables.py agree.
 # ---------------------------------------------------------------------------
 
+TEAM_SIDE = "'home', 'away'"
+CAMERA_TYPE = "'broadcast', 'tactical_fixed'"
+MATCH_STATUS = "'queued', 'processing', 'ready', 'failed'"
+TEAM = "0, 1"
+VIEW_TYPE = "'tactical', 'replay', 'closeup', 'crowd', 'graphic', 'unknown'"
+POSSESSION_OUTCOME = "'shot', 'turnover', 'out_of_play', 'end_of_half', 'unknown'"
+POSSESSION_SOURCE = "'ball', 'fallback'"
+EVENT_TYPE = (
+    "'corner', 'throw_in', 'goal_kick', 'kickoff', 'turnover', 'shot', 'cross',"
+    " 'pass_final_third', 'counter_attack', 'press_trigger'"
+)
+EVENT_SOURCE = "'detector', 'derived', 'manual'"
+EVENT_STATUS = "'provisional', 'confirmed', 'retracted'"
+METRIC_NAME = (
+    "'defensive_line_height', 'team_width', 'compactness', 'possession_share', 'ppda_proxy'"
+)
+JOB_KIND = "'ingest', 'reprocess'"
+JOB_STATUS = "'queued', 'running', 'done', 'failed'"
+EVAL_KIND = "'perception', 'assistant'"
+EVAL_CASE_STATUS = "'candidate', 'active', 'retired'"
 
-def _cv(enum_cls: type) -> str:  # type: ignore[type-arg]
-    parts: list[str] = []
-    for m in enum_cls:  # type: ignore[attr-defined]
-        v = m.value
-        parts.append(f"'{v}'" if isinstance(v, str) else str(v))
-    return ", ".join(parts)
+PV_CHECK = "pipeline_version ~ '^[a-z0-9][a-z0-9._-]{0,63}$'"
+
+# float4 is a Python float; without the type argument pyright sees REAL[Unknown].
+_REAL: sa.REAL[float] = sa.REAL()
+
+
+class _Vector768(sa.types.UserDefinedType[list[float]]):
+    """pgvector `vector(768)`, frozen here rather than imported from tables.py."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw: Any) -> str:
+        return "vector(768)"
 
 
 # ---------------------------------------------------------------------------
@@ -77,18 +90,18 @@ def upgrade() -> None:
         sa.Column("team_a_side", sa.Text(), nullable=False),
         sa.Column("video_uri", sa.Text(), nullable=False),
         sa.Column("hls_uri", sa.Text(), nullable=False),
-        sa.Column("duration_s", sa.REAL(), nullable=False),
-        sa.Column("fps", sa.REAL(), nullable=False),
+        sa.Column("duration_s", _REAL, nullable=False),
+        sa.Column("fps", _REAL, nullable=False),
         sa.Column("camera_type", sa.Text(), nullable=False),
-        sa.Column("half1_kickoff_s", sa.REAL(), nullable=True),
-        sa.Column("half1_end_s", sa.REAL(), nullable=True),
-        sa.Column("half2_kickoff_s", sa.REAL(), nullable=True),
-        sa.Column("half2_end_s", sa.REAL(), nullable=True),
+        sa.Column("half1_kickoff_s", _REAL, nullable=True),
+        sa.Column("half1_end_s", _REAL, nullable=True),
+        sa.Column("half2_kickoff_s", _REAL, nullable=True),
+        sa.Column("half2_end_s", _REAL, nullable=True),
         sa.Column(
             "status",
             sa.Text(),
             nullable=False,
-            server_default=MatchStatus.QUEUED.value,
+            server_default="queued",
         ),
         sa.Column("active_pipeline_version", sa.Text(), nullable=True),
         sa.Column(
@@ -98,11 +111,11 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
         sa.CheckConstraint("id ~ '^m_[a-z0-9_]{1,62}$'", name="ck_matches_id_pattern"),
-        sa.CheckConstraint(f"team_a_side IN ({_cv(TeamSide)})", name="ck_matches_team_a_side"),
+        sa.CheckConstraint(f"team_a_side IN ({TEAM_SIDE})", name="ck_matches_team_a_side"),
         sa.CheckConstraint("duration_s > 0", name="ck_matches_duration_s"),
         sa.CheckConstraint("fps > 0", name="ck_matches_fps"),
-        sa.CheckConstraint(f"camera_type IN ({_cv(CameraType)})", name="ck_matches_camera_type"),
-        sa.CheckConstraint(f"status IN ({_cv(MatchStatus)})", name="ck_matches_status"),
+        sa.CheckConstraint(f"camera_type IN ({CAMERA_TYPE})", name="ck_matches_camera_type"),
+        sa.CheckConstraint(f"status IN ({MATCH_STATUS})", name="ck_matches_status"),
         sa.CheckConstraint(
             "(half1_kickoff_s IS NULL AND half1_end_s IS NULL"
             " AND half2_kickoff_s IS NULL AND half2_end_s IS NULL)"
@@ -132,7 +145,7 @@ def upgrade() -> None:
         sa.Column("attack_direction", sa.SmallInteger(), nullable=False),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("match_id", "team", "half"),
-        sa.CheckConstraint(f"team IN ({_cv(Team)})", name="ck_team_orientation_team"),
+        sa.CheckConstraint(f"team IN ({TEAM})", name="ck_team_orientation_team"),
         sa.CheckConstraint("half IN (1, 2)", name="ck_team_orientation_half"),
         sa.CheckConstraint("attack_direction IN (-1, 1)", name="ck_team_orientation_attack_dir"),
     )
@@ -144,22 +157,22 @@ def upgrade() -> None:
         "video_segments",
         sa.Column("match_id", sa.Text(), nullable=False),
         sa.Column("pipeline_version", sa.Text(), nullable=False),
-        sa.Column("t_start", sa.REAL(), nullable=False),
-        sa.Column("t_end", sa.REAL(), nullable=False),
+        sa.Column("t_start", _REAL, nullable=False),
+        sa.Column("t_end", _REAL, nullable=False),
         sa.Column("view_type", sa.Text(), nullable=False),
         sa.Column("usable", sa.Boolean(), nullable=False),
         sa.Column("half", sa.SmallInteger(), nullable=True),
-        sa.Column("clock_start", sa.REAL(), nullable=True),
-        sa.Column("clock_end", sa.REAL(), nullable=True),
+        sa.Column("clock_start", _REAL, nullable=True),
+        sa.Column("clock_end", _REAL, nullable=True),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("match_id", "pipeline_version", "t_start"),
         sa.CheckConstraint(
-            "pipeline_version ~ '^[a-z0-9][a-z0-9._-]{0,63}$'",
+            PV_CHECK,
             name="ck_video_segments_pv",
         ),
         sa.CheckConstraint("t_start >= 0", name="ck_video_segments_tstart_ge_0"),
         sa.CheckConstraint("t_end > t_start", name="ck_video_segments_tend_gt_tstart"),
-        sa.CheckConstraint(f"view_type IN ({_cv(ViewType)})", name="ck_video_segments_view_type"),
+        sa.CheckConstraint(f"view_type IN ({VIEW_TYPE})", name="ck_video_segments_view_type"),
         sa.CheckConstraint(
             "NOT usable OR view_type = 'tactical'", name="ck_video_segments_usable_tactical"
         ),
@@ -180,31 +193,29 @@ def upgrade() -> None:
         sa.Column("match_id", sa.Text(), nullable=False),
         sa.Column("pipeline_version", sa.Text(), nullable=False),
         sa.Column("team", sa.SmallInteger(), nullable=False),
-        sa.Column("t_start", sa.REAL(), nullable=False),
-        sa.Column("t_end", sa.REAL(), nullable=False),
+        sa.Column("t_start", _REAL, nullable=False),
+        sa.Column("t_end", _REAL, nullable=False),
         sa.Column("half", sa.SmallInteger(), nullable=False),
-        sa.Column("clock_start", sa.REAL(), nullable=False),
-        sa.Column("clock_end", sa.REAL(), nullable=False),
-        sa.Column("x_start", sa.REAL(), nullable=True),
-        sa.Column("y_start", sa.REAL(), nullable=True),
-        sa.Column("x_end", sa.REAL(), nullable=True),
-        sa.Column("y_end", sa.REAL(), nullable=True),
+        sa.Column("clock_start", _REAL, nullable=False),
+        sa.Column("clock_end", _REAL, nullable=False),
+        sa.Column("x_start", _REAL, nullable=True),
+        sa.Column("y_start", _REAL, nullable=True),
+        sa.Column("x_end", _REAL, nullable=True),
+        sa.Column("y_end", _REAL, nullable=True),
         sa.Column("outcome", sa.Text(), nullable=False),
         sa.Column("n_passes", sa.SmallInteger(), nullable=True),
         sa.Column("source", sa.Text(), nullable=False),
-        sa.Column("confidence", sa.REAL(), nullable=False),
+        sa.Column("confidence", _REAL, nullable=False),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint("id ~ '^pos_[a-z0-9_]+$'", name="ck_possessions_id_pattern"),
-        sa.CheckConstraint(
-            "pipeline_version ~ '^[a-z0-9][a-z0-9._-]{0,63}$'", name="ck_possessions_pv"
-        ),
-        sa.CheckConstraint(f"team IN ({_cv(Team)})", name="ck_possessions_team"),
+        sa.CheckConstraint(PV_CHECK, name="ck_possessions_pv"),
+        sa.CheckConstraint(f"team IN ({TEAM})", name="ck_possessions_team"),
         sa.CheckConstraint("t_start >= 0", name="ck_possessions_tstart_ge_0"),
         sa.CheckConstraint("t_end > t_start", name="ck_possessions_tend_gt_tstart"),
         sa.CheckConstraint("half IN (1, 2)", name="ck_possessions_half"),
-        sa.CheckConstraint(f"outcome IN ({_cv(PossessionOutcome)})", name="ck_possessions_outcome"),
-        sa.CheckConstraint(f"source IN ({_cv(PossessionSource)})", name="ck_possessions_source"),
+        sa.CheckConstraint(f"outcome IN ({POSSESSION_OUTCOME})", name="ck_possessions_outcome"),
+        sa.CheckConstraint(f"source IN ({POSSESSION_SOURCE})", name="ck_possessions_source"),
         sa.CheckConstraint("confidence BETWEEN 0 AND 1", name="ck_possessions_conf_range"),
         sa.CheckConstraint(
             "(x_start IS NULL AND y_start IS NULL AND x_end IS NULL AND y_end IS NULL)"
@@ -230,40 +241,40 @@ def upgrade() -> None:
         sa.Column("pipeline_version", sa.Text(), nullable=False),
         sa.Column("type", sa.Text(), nullable=False),
         sa.Column("team", sa.SmallInteger(), nullable=True),
-        sa.Column("t_video", sa.REAL(), nullable=False),
-        sa.Column("t_end", sa.REAL(), nullable=True),
+        sa.Column("t_video", _REAL, nullable=False),
+        sa.Column("t_end", _REAL, nullable=True),
         sa.Column("half", sa.SmallInteger(), nullable=False),
-        sa.Column("match_clock", sa.REAL(), nullable=False),
-        sa.Column("x_pitch", sa.REAL(), nullable=True),
-        sa.Column("y_pitch", sa.REAL(), nullable=True),
+        sa.Column("match_clock", _REAL, nullable=False),
+        sa.Column("x_pitch", _REAL, nullable=True),
+        sa.Column("y_pitch", _REAL, nullable=True),
         sa.Column(
             "attrs",
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        sa.Column("confidence", sa.REAL(), nullable=False),
+        sa.Column("confidence", _REAL, nullable=False),
         sa.Column("source", sa.Text(), nullable=False),
         sa.Column(
             "status",
             sa.Text(),
             nullable=False,
-            server_default=EventStatus.CONFIRMED.value,
+            server_default="confirmed",
         ),
         sa.Column("revision", sa.Integer(), nullable=False, server_default="1"),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint("id ~ '^evt_[a-z0-9]{12}$'", name="ck_events_id_pattern"),
-        sa.CheckConstraint("pipeline_version ~ '^[a-z0-9][a-z0-9._-]{0,63}$'", name="ck_events_pv"),
-        sa.CheckConstraint(f"type IN ({_cv(EventType)})", name="ck_events_type"),
-        sa.CheckConstraint(f"team IN ({_cv(Team)})", name="ck_events_team"),
+        sa.CheckConstraint(PV_CHECK, name="ck_events_pv"),
+        sa.CheckConstraint(f"type IN ({EVENT_TYPE})", name="ck_events_type"),
+        sa.CheckConstraint(f"team IN ({TEAM})", name="ck_events_team"),
         sa.CheckConstraint("half IN (1, 2)", name="ck_events_half"),
         sa.CheckConstraint("t_video >= 0", name="ck_events_tvideo_ge_0"),
         sa.CheckConstraint("t_end IS NULL OR t_end >= t_video", name="ck_events_tend_ge_tvideo"),
         sa.CheckConstraint("match_clock >= 0", name="ck_events_match_clock_ge_0"),
         sa.CheckConstraint("confidence BETWEEN 0 AND 1", name="ck_events_conf_range"),
-        sa.CheckConstraint(f"source IN ({_cv(EventSource)})", name="ck_events_source"),
-        sa.CheckConstraint(f"status IN ({_cv(EventStatus)})", name="ck_events_status"),
+        sa.CheckConstraint(f"source IN ({EVENT_SOURCE})", name="ck_events_source"),
+        sa.CheckConstraint(f"status IN ({EVENT_STATUS})", name="ck_events_status"),
         sa.CheckConstraint("revision >= 1", name="ck_events_revision_ge_1"),
         sa.CheckConstraint(
             "(x_pitch IS NULL AND y_pitch IS NULL)"
@@ -294,23 +305,21 @@ def upgrade() -> None:
         sa.Column("pipeline_version", sa.Text(), nullable=False),
         sa.Column("team", sa.SmallInteger(), nullable=False),
         sa.Column("half", sa.SmallInteger(), nullable=False),
-        sa.Column("window_start", sa.REAL(), nullable=False),
-        sa.Column("window_end", sa.REAL(), nullable=False),
+        sa.Column("window_start", _REAL, nullable=False),
+        sa.Column("window_end", _REAL, nullable=False),
         sa.Column("metric", sa.Text(), nullable=False),
-        sa.Column("value", sa.REAL(), nullable=True),
-        sa.Column("coverage", sa.REAL(), nullable=False),
+        sa.Column("value", _REAL, nullable=True),
+        sa.Column("coverage", _REAL, nullable=False),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint(
             "match_id", "pipeline_version", "team", "half", "window_start", "metric"
         ),
-        sa.CheckConstraint(
-            "pipeline_version ~ '^[a-z0-9][a-z0-9._-]{0,63}$'", name="ck_team_metrics_pv"
-        ),
-        sa.CheckConstraint(f"team IN ({_cv(Team)})", name="ck_team_metrics_team"),
+        sa.CheckConstraint(PV_CHECK, name="ck_team_metrics_pv"),
+        sa.CheckConstraint(f"team IN ({TEAM})", name="ck_team_metrics_team"),
         sa.CheckConstraint("half IN (1, 2)", name="ck_team_metrics_half"),
         sa.CheckConstraint("window_start >= 0", name="ck_team_metrics_wstart_ge_0"),
         sa.CheckConstraint("window_end > window_start", name="ck_team_metrics_wend_gt_wstart"),
-        sa.CheckConstraint(f"metric IN ({_cv(MetricName)})", name="ck_team_metrics_metric"),
+        sa.CheckConstraint(f"metric IN ({METRIC_NAME})", name="ck_team_metrics_metric"),
         sa.CheckConstraint("coverage BETWEEN 0 AND 1", name="ck_team_metrics_cov_range"),
         sa.CheckConstraint(
             "(coverage = 0 AND value IS NULL) OR (coverage > 0 AND value IS NOT NULL)",
@@ -326,36 +335,18 @@ def upgrade() -> None:
         sa.Column("event_id", sa.Text(), nullable=False),
         sa.Column("pipeline_version", sa.Text(), nullable=False),
         sa.Column("model", sa.Text(), nullable=False),
-        # vector(768) — emitted as raw DDL because SQLAlchemy has no built-in
-        sa.Column(
-            "embedding",
-            sa.Text().with_variant(
-                # We use execute_raw DDL below; this column type is replaced
-                sa.Text(),
-                "postgresql",
-            ),
-            nullable=False,
-        ),
+        sa.Column("embedding", _Vector768(), nullable=False),
         sa.ForeignKeyConstraint(["event_id"], ["events.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("event_id"),
-        sa.CheckConstraint(
-            "pipeline_version ~ '^[a-z0-9][a-z0-9._-]{0,63}$'",
-            name="ck_event_embeddings_pv",
-        ),
-    )
-    # Replace the placeholder Text column with the real vector(768) type
-    op.execute(
-        sa.text(
-            "ALTER TABLE event_embeddings ALTER COLUMN embedding TYPE vector(768)"
-            " USING embedding::vector(768)"
-        )
+        sa.CheckConstraint(PV_CHECK, name="ck_event_embeddings_pv"),
     )
     # HNSW cosine similarity index — schema.md §5.7
-    op.execute(
-        sa.text(
-            "CREATE INDEX ix_event_embeddings_hnsw ON event_embeddings"
-            " USING hnsw (embedding vector_cosine_ops)"
-        )
+    op.create_index(
+        "ix_event_embeddings_hnsw",
+        "event_embeddings",
+        ["embedding"],
+        postgresql_using="hnsw",
+        postgresql_ops={"embedding": "vector_cosine_ops"},
     )
 
     # ------------------------------------------------------------------
@@ -370,7 +361,7 @@ def upgrade() -> None:
             "status",
             sa.Text(),
             nullable=False,
-            server_default=JobStatus.QUEUED.value,
+            server_default="queued",
         ),
         sa.Column(
             "params",
@@ -390,8 +381,8 @@ def upgrade() -> None:
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
-        sa.CheckConstraint(f"kind IN ({_cv(JobKind)})", name="ck_jobs_kind"),
-        sa.CheckConstraint(f"status IN ({_cv(JobStatus)})", name="ck_jobs_status"),
+        sa.CheckConstraint(f"kind IN ({JOB_KIND})", name="ck_jobs_kind"),
+        sa.CheckConstraint(f"status IN ({JOB_STATUS})", name="ck_jobs_status"),
         sa.CheckConstraint("attempts >= 0", name="ck_jobs_attempts_ge_0"),
         sa.CheckConstraint(
             "(status = 'failed' AND error IS NOT NULL) OR (status != 'failed' AND error IS NULL)",
@@ -426,7 +417,7 @@ def upgrade() -> None:
         sa.Column("pipeline_version", sa.Text(), nullable=False),
         sa.Column("node", sa.Text(), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("duration_s", sa.REAL(), nullable=False),
+        sa.Column("duration_s", _REAL, nullable=False),
         sa.Column("ok", sa.Boolean(), nullable=False),
         sa.Column("rows_out", sa.BigInteger(), nullable=True),
         sa.Column(
@@ -440,9 +431,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("run_id", "node", name="uq_pipeline_runs_run_node"),
-        sa.CheckConstraint(
-            "pipeline_version ~ '^[a-z0-9][a-z0-9._-]{0,63}$'", name="ck_pipeline_runs_pv"
-        ),
+        sa.CheckConstraint(PV_CHECK, name="ck_pipeline_runs_pv"),
         sa.CheckConstraint("duration_s >= 0", name="ck_pipeline_runs_duration_ge_0"),
         sa.CheckConstraint(
             "(ok = false AND error IS NOT NULL) OR (ok = true AND error IS NULL)",
@@ -503,8 +492,8 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["feedback_id"], ["feedback.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("case_id"),
-        sa.CheckConstraint(f"kind IN ({_cv(EvalKind)})", name="ck_eval_cases_kind"),
-        sa.CheckConstraint(f"status IN ({_cv(EvalCaseStatus)})", name="ck_eval_cases_status"),
+        sa.CheckConstraint(f"kind IN ({EVAL_KIND})", name="ck_eval_cases_kind"),
+        sa.CheckConstraint(f"status IN ({EVAL_CASE_STATUS})", name="ck_eval_cases_status"),
     )
 
     # ------------------------------------------------------------------
@@ -518,7 +507,7 @@ def upgrade() -> None:
         sa.Column("git_sha", sa.Text(), nullable=False),
         sa.Column("pipeline_version", sa.Text(), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("score", sa.REAL(), nullable=False),
+        sa.Column("score", _REAL, nullable=False),
         sa.Column("passed", sa.Boolean(), nullable=False),
         sa.Column(
             "details",
@@ -528,9 +517,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["case_id"], ["eval_cases.case_id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("run_id", "case_id"),
-        sa.CheckConstraint(
-            "pipeline_version ~ '^[a-z0-9][a-z0-9._-]{0,63}$'", name="ck_eval_runs_pv"
-        ),
+        sa.CheckConstraint(PV_CHECK, name="ck_eval_runs_pv"),
     )
 
 
@@ -547,7 +534,7 @@ def downgrade() -> None:
     op.drop_index("ix_jobs_dequeue", table_name="jobs")
     op.drop_index("uq_jobs_active_match", table_name="jobs")
     op.drop_table("jobs")
-    op.execute(sa.text("DROP INDEX IF EXISTS ix_event_embeddings_hnsw"))
+    op.drop_index("ix_event_embeddings_hnsw", table_name="event_embeddings")
     op.drop_table("event_embeddings")
     op.drop_table("team_metrics")
     op.drop_index("ix_events_match_pv_tvideo", table_name="events")
@@ -558,4 +545,5 @@ def downgrade() -> None:
     op.drop_table("video_segments")
     op.drop_table("team_orientation")
     op.drop_table("matches")
-    op.execute(sa.text("DROP EXTENSION IF EXISTS vector CASCADE"))
+    # No CASCADE: if something else still uses pgvector, fail instead of dropping it.
+    op.execute(sa.text("DROP EXTENSION IF EXISTS vector"))

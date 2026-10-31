@@ -1,7 +1,8 @@
 """Alembic environment script.
 
 Responsibilities:
-- Read DATABASE_URL from the environment (normalising postgresql:// → postgresql+psycopg://).
+- Resolve the DB URL: explicit sqlalchemy.url, else DATABASE_URL, else the local default
+  (normalising postgres:// and postgresql:// → postgresql+psycopg://).
 - Expose target_metadata so autogenerate can diff against the live DB.
 - Exclude burr_state (schema.md §5.11 — owned by Burr's persister, not Alembic).
 - Support both offline (--sql) and online migration modes.
@@ -39,17 +40,19 @@ if config.config_file_name is not None:
 def _get_url() -> str:
     """Return the SQLAlchemy URL for the target database.
 
-    Reads DATABASE_URL from the environment.  Falls back to the value in
-    alembic.ini so that `make migrate` works without a .env file in CI.
-    Always ensures the psycopg 3 driver prefix is used.
+    An explicit sqlalchemy.url (alembic.ini leaves it unset, so only code sets it,
+    e.g. a test fixture) wins over DATABASE_URL: a fixture must never migrate the
+    dev DB by accident.  Falls back to the local default so `make migrate` works
+    without a .env file.  Always ensures the psycopg 3 driver prefix is used.
     """
-    url = os.getenv(
-        "DATABASE_URL",
-        config.get_main_option("sqlalchemy.url", "postgresql+psycopg://fva:fva@localhost:5432/fva"),
+    url = (
+        config.get_main_option("sqlalchemy.url")
+        or os.getenv("DATABASE_URL")
+        or "postgresql+psycopg://fva:fva@localhost:5432/fva"
     )
-    # Normalise: plain postgresql:// → postgresql+psycopg://
-    if url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    for scheme in ("postgres://", "postgresql://"):
+        if url.startswith(scheme):
+            url = "postgresql+psycopg://" + url.removeprefix(scheme)
     return url
 
 
