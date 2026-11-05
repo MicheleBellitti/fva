@@ -1,6 +1,7 @@
+import math
 import uuid
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -22,27 +23,32 @@ from core.models.enums import (
     ViewType,
 )
 
+Half = Literal[1, 2]
+PipelineVersion = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$")]
 
-class Match(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
+class _BaseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class Match(_BaseModel):
     id: str = Field(frozen=True, pattern=r"^m_[a-z0-9_]{1,62}$")
-    competition: str
+    competition: str | None = None
     date: date
     home_team: str
     away_team: str
-    team_a_side: TeamSide | str
+    team_a_side: TeamSide
     video_uri: str
     duration_s: float = Field(gt=0)
     fps: float = Field(gt=0)
-    camera_type: CameraType | str
+    camera_type: CameraType
     hls_uri: str
     half1_kickoff_s: float | None = None
     half1_end_s: float | None = None
     half2_kickoff_s: float | None = None
     half2_end_s: float | None = None
-    status: MatchStatus | str = Field(default=MatchStatus.QUEUED)
-    active_pipeline_version: str | None = None
+    status: MatchStatus = Field(default=MatchStatus.QUEUED)
+    active_pipeline_version: PipelineVersion | None = None
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
@@ -60,13 +66,19 @@ class Match(BaseModel):
             raise ValueError("Invariante tempi violato: 0 <= h1k < h1e <= h2k < h2e <= duration_s")
         return self
 
+    @model_validator(mode="after")
+    def validate_ready(self) -> "Match":
+        if self.status == MatchStatus.READY and (
+            self.active_pipeline_version is None or self.half1_kickoff_s is None
+        ):
+            raise ValueError("status ready richiede active_pipeline_version e i tempi di gioco")
+        return self
 
-class TeamOrientation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
+class TeamOrientation(_BaseModel):
     match_id: str
     team: Team | int
-    half: int
+    half: Half
     attack_direction: int
 
     @field_validator("attack_direction")
@@ -77,16 +89,14 @@ class TeamOrientation(BaseModel):
         raise ValueError("Valore errato: attack_direction deve essere 1 o -1")
 
 
-class VideoSegment(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class VideoSegment(_BaseModel):
     match_id: str
-    pipeline_version: str
+    pipeline_version: PipelineVersion
     t_start: float = Field(ge=0)
     t_end: float
-    view_type: ViewType | str
+    view_type: ViewType
     usable: bool
-    half: int | None = None
+    half: Half | None = None
     clock_start: float | None = None
     clock_end: float | None = None
 
@@ -107,24 +117,22 @@ class VideoSegment(BaseModel):
         return self
 
 
-class Possession(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
+class Possession(_BaseModel):
+    id: str = Field(pattern=r"^pos_[a-z0-9_]+$")
     match_id: str
-    pipeline_version: str
-    team: Team | int
-    t_start: float = Field(default=0.0, ge=0.0)
+    pipeline_version: PipelineVersion
+    team: Team
+    t_start: float = Field(ge=0.0)
     t_end: float
-    half: int
+    half: Half
     clock_start: float
     clock_end: float
     x_start: float | None = None
     y_start: float | None = None
     x_end: float | None = None
     y_end: float | None = None
-    outcome: PossessionOutcome | str
-    source: PossessionSource | str
+    outcome: PossessionOutcome
+    source: PossessionSource
     n_passes: int | None = None
     confidence: float = Field(ge=0.0, le=1.0)
 
@@ -139,29 +147,27 @@ class Possession(BaseModel):
         if self.source in (PossessionSource.FALLBACK, "fallback"):
             if self.n_passes is not None:
                 raise ValueError("n_passes deve essere None per source fallback")
-            if self.confidence != 0.4:
+            if not math.isclose(self.confidence, 0.4, abs_tol=1e-6):
                 raise ValueError("confidence deve essere 0.4 per source fallback")
         return self
 
 
-class Event(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Event(_BaseModel):
     id: str = Field(pattern=r"^evt_[a-z0-9]{12}$")
     match_id: str
-    pipeline_version: str
-    type: EventType | str
-    team: Team | int | None = None
+    pipeline_version: PipelineVersion
+    type: EventType
+    team: Team
     t_video: float = Field(ge=0.0)
     t_end: float | None = None
-    half: int
+    half: Half
     match_clock: float = Field(ge=0.0)
     x_pitch: float | None = None
     y_pitch: float | None = None
     attrs: dict[str, Any] = Field(default_factory=dict)
     confidence: float = Field(ge=0.0, le=1.0)
-    source: EventSource | str
-    status: EventStatus | str = Field(default=EventStatus.CONFIRMED)
+    source: EventSource
+    status: EventStatus = Field(default=EventStatus.CONFIRMED)
     revision: int = Field(default=1, ge=1)
 
     @field_validator("status")
@@ -187,16 +193,14 @@ class Event(BaseModel):
         return self
 
 
-class TeamMetric(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class TeamMetric(_BaseModel):
     match_id: str
-    pipeline_version: str
-    team: Team | int
-    half: int
-    window_start: float
+    pipeline_version: PipelineVersion
+    team: Team
+    half: Half
+    window_start: float = Field(ge=0.0)
     window_end: float
-    metric: MetricName | str
+    metric: MetricName
     coverage: float = Field(ge=0.0, le=1.0)
     value: float | None = None
 
@@ -211,24 +215,20 @@ class TeamMetric(BaseModel):
         return self
 
 
-class EventEmbedding(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class EventEmbedding(_BaseModel):
     event_id: str
-    pipeline_version: str
+    pipeline_version: PipelineVersion
     model: str
     embedding: list[float] = Field(min_length=768, max_length=768)
 
 
-class Job(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: int
+class Job(_BaseModel):
+    id: int | None = None
     match_id: str
-    kind: JobKind | str
-    status: JobStatus | str = Field(default=JobStatus.QUEUED)
+    kind: JobKind
+    status: JobStatus = Field(default=JobStatus.QUEUED)
     params: dict[str, Any] = Field(default_factory=dict)
-    attempts: int = Field(default=0)
+    attempts: int = Field(default=0, ge=0, le=32767)
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
     locked_at: AwareDatetime | None = None
     locked_by: str | None = None
@@ -244,14 +244,12 @@ class Job(BaseModel):
         return self
 
 
-class PipelineRun(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class PipelineRun(_BaseModel):
     id: int
     run_id: uuid.UUID
     job_id: int | None = None
     match_id: str
-    pipeline_version: str
+    pipeline_version: PipelineVersion
     node: str
     started_at: AwareDatetime
     duration_s: float = Field(ge=0)
@@ -270,9 +268,7 @@ class PipelineRun(BaseModel):
         return self
 
 
-class Feedback(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Feedback(_BaseModel):
     id: int | None = None
     ts: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
     conversation_id: str
@@ -291,12 +287,10 @@ class Feedback(BaseModel):
         return v
 
 
-class EvalCase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class EvalCase(_BaseModel):
     case_id: str
-    kind: EvalKind | str
-    status: EvalCaseStatus | str
+    kind: EvalKind
+    status: EvalCaseStatus
     input: dict[str, Any]
     expected: dict[str, Any]
     feedback_id: int | None = None
@@ -304,14 +298,12 @@ class EvalCase(BaseModel):
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-class EvalRun(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class EvalRun(_BaseModel):
     run_id: uuid.UUID
     case_id: str
     content_hash: str
     git_sha: str
-    pipeline_version: str
+    pipeline_version: PipelineVersion
     started_at: AwareDatetime
     score: float
     passed: bool

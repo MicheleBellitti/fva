@@ -290,3 +290,176 @@ def test_team_metric_coverage_value_invariant() -> None:
     data["value"] = None
     metric = TeamMetric(**data)
     assert metric.value is None
+
+
+@pytest.mark.parametrize("bad_val", [float("nan"), float("inf"), float("-inf")])
+def test_models_reject_nan_and_inf(bad_val: float) -> None:
+    data = sample_event_data()
+    data["t_end"] = bad_val
+    with pytest.raises(ValidationError) as exc_info:
+        Event(**data)
+    assert any(err["type"] == "finite_number" for err in exc_info.value.errors())
+
+    metric_data = sample_team_metric_data()
+    metric_data["value"] = bad_val
+    with pytest.raises(ValidationError) as exc_info:
+        TeamMetric(**metric_data)
+    assert any(err["type"] == "finite_number" for err in exc_info.value.errors())
+
+    segment_data = sample_video_segment_data()
+    segment_data["t_end"] = bad_val
+    with pytest.raises(ValidationError) as exc_info:
+        VideoSegment(**segment_data)
+    assert any(err["type"] == "finite_number" for err in exc_info.value.errors())
+
+
+@pytest.mark.parametrize("invalid_half", [0, 3, -1])
+def test_models_reject_invalid_half(invalid_half: int) -> None:
+    data_event = sample_event_data()
+    data_event["half"] = invalid_half
+    with pytest.raises(ValidationError):
+        Event(**data_event)
+
+    data_orient = sample_team_orientation_data()
+    data_orient["half"] = invalid_half
+    with pytest.raises(ValidationError):
+        TeamOrientation(**data_orient)
+
+    data_seg = sample_video_segment_data()
+    data_seg["half"] = invalid_half
+    with pytest.raises(ValidationError):
+        VideoSegment(**data_seg)
+
+    data_pos = sample_possession_data()
+    data_pos["half"] = invalid_half
+    with pytest.raises(ValidationError):
+        Possession(**data_pos)
+
+    data_metric = sample_team_metric_data()
+    data_metric["half"] = invalid_half
+    with pytest.raises(ValidationError):
+        TeamMetric(**data_metric)
+
+
+@pytest.mark.parametrize("invalid_pv", ["Synth V1", "invalid/version", "", "_pv", "pv with spaces"])
+def test_models_reject_invalid_pipeline_version(invalid_pv: str) -> None:
+    data_event = sample_event_data()
+    data_event["pipeline_version"] = invalid_pv
+    with pytest.raises(ValidationError):
+        Event(**data_event)
+
+    data_match = sample_match_data()
+    data_match["active_pipeline_version"] = invalid_pv
+    with pytest.raises(ValidationError):
+        Match(**data_match)
+
+    data_seg = sample_video_segment_data()
+    data_seg["pipeline_version"] = invalid_pv
+    with pytest.raises(ValidationError):
+        VideoSegment(**data_seg)
+
+    data_pos = sample_possession_data()
+    data_pos["pipeline_version"] = invalid_pv
+    with pytest.raises(ValidationError):
+        Possession(**data_pos)
+
+    data_metric = sample_team_metric_data()
+    data_metric["pipeline_version"] = invalid_pv
+    with pytest.raises(ValidationError):
+        TeamMetric(**data_metric)
+
+    data_emb = sample_event_embedding_data()
+    data_emb["pipeline_version"] = invalid_pv
+    with pytest.raises(ValidationError):
+        EventEmbedding(**data_emb)
+
+    data_run = sample_pipeline_run_data()
+    data_run["pipeline_version"] = invalid_pv
+    with pytest.raises(ValidationError):
+        PipelineRun(**data_run)
+
+    data_eval = sample_eval_run_data()
+    data_eval["pipeline_version"] = invalid_pv
+    with pytest.raises(ValidationError):
+        EvalRun(**data_eval)
+
+
+@pytest.mark.parametrize("invalid_id", ["p_1", "pos_", "pos-123", "POS_123", ""])
+def test_possession_rejects_invalid_id(invalid_id: str) -> None:
+    data = sample_possession_data()
+    data["id"] = invalid_id
+    with pytest.raises(ValidationError):
+        Possession(**data)
+
+
+def test_match_ready_invariant() -> None:
+    data = sample_match_data()
+    data["status"] = MatchStatus.READY
+    data["active_pipeline_version"] = None
+    with pytest.raises(ValidationError, match="status ready richiede active_pipeline_version"):
+        Match(**data)
+
+    data = sample_match_data()
+    data["status"] = MatchStatus.READY
+    data["active_pipeline_version"] = "synth-v1"
+    data["half1_kickoff_s"] = None
+    data["half1_end_s"] = None
+    data["half2_kickoff_s"] = None
+    data["half2_end_s"] = None
+    with pytest.raises(ValidationError, match="status ready richiede active_pipeline_version"):
+        Match(**data)
+
+
+def test_team_metric_window_start_non_negative() -> None:
+    data = sample_team_metric_data()
+    data["window_start"] = -0.5
+    with pytest.raises(ValidationError):
+        TeamMetric(**data)
+
+
+@pytest.mark.parametrize("invalid_attempts", [-1, 32768, 40000])
+def test_job_attempts_bounds(invalid_attempts: int) -> None:
+    data = sample_job_data()
+    data["attempts"] = invalid_attempts
+    data["locked_at"] = datetime.now(UTC)
+    data["finished_at"] = datetime.now(UTC)
+    with pytest.raises(ValidationError):
+        Job(**data)
+
+
+def test_model_table_parity_structural() -> None:
+    from core.models.tables import PIPELINE_VERSION_PATTERN, metadata
+    from sqlalchemy import CheckConstraint
+
+    # Table -> Model map
+    table_to_model = {
+        "matches": Match,
+        "team_orientation": TeamOrientation,
+        "video_segments": VideoSegment,
+        "possessions": Possession,
+        "events": Event,
+        "team_metrics": TeamMetric,
+        "event_embeddings": EventEmbedding,
+        "jobs": Job,
+        "pipeline_runs": PipelineRun,
+        "eval_runs": EvalRun,
+    }
+
+    for table_name, model_cls in table_to_model.items():
+        tbl = metadata.tables[table_name]
+        check_texts = [str(c.sqltext) for c in tbl.constraints if isinstance(c, CheckConstraint)]
+
+        # Check half IN (1, 2) parity
+        if any("half IN (1, 2)" in ct for ct in check_texts):
+            field = model_cls.model_fields["half"]
+            # annotation should be Literal[1, 2] or Literal[1, 2] | None
+            ann_str = str(field.annotation)
+            assert "Literal[1, 2]" in ann_str, f"{model_cls.__name__}.half missing Literal[1, 2]"
+
+        # Check pipeline_version regex parity
+        if any("pipeline_version ~" in ct for ct in check_texts):
+            field = model_cls.model_fields["pipeline_version"]
+            patterns = [getattr(m, "pattern", None) for m in field.metadata]
+            assert PIPELINE_VERSION_PATTERN in patterns, (
+                f"{model_cls.__name__}.pipeline_version does not match PIPELINE_VERSION_PATTERN"
+            )

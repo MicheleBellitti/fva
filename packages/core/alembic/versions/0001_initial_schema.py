@@ -112,8 +112,8 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("id ~ '^m_[a-z0-9_]{1,62}$'", name="ck_matches_id_pattern"),
         sa.CheckConstraint(f"team_a_side IN ({TEAM_SIDE})", name="ck_matches_team_a_side"),
-        sa.CheckConstraint("duration_s > 0", name="ck_matches_duration_s"),
-        sa.CheckConstraint("fps > 0", name="ck_matches_fps"),
+        sa.CheckConstraint("duration_s > 0 AND duration_s <> 'NaN'", name="ck_matches_duration_s"),
+        sa.CheckConstraint("fps > 0 AND fps <> 'NaN'", name="ck_matches_fps"),
         sa.CheckConstraint(f"camera_type IN ({CAMERA_TYPE})", name="ck_matches_camera_type"),
         sa.CheckConstraint(f"status IN ({MATCH_STATUS})", name="ck_matches_status"),
         sa.CheckConstraint(
@@ -170,8 +170,12 @@ def upgrade() -> None:
             PV_CHECK,
             name="ck_video_segments_pv",
         ),
-        sa.CheckConstraint("t_start >= 0", name="ck_video_segments_tstart_ge_0"),
-        sa.CheckConstraint("t_end > t_start", name="ck_video_segments_tend_gt_tstart"),
+        sa.CheckConstraint(
+            "t_start >= 0 AND t_start <> 'NaN'", name="ck_video_segments_tstart_ge_0"
+        ),
+        sa.CheckConstraint(
+            "t_end > t_start AND t_end <> 'NaN'", name="ck_video_segments_tend_gt_tstart"
+        ),
         sa.CheckConstraint(f"view_type IN ({VIEW_TYPE})", name="ck_video_segments_view_type"),
         sa.CheckConstraint(
             "NOT usable OR view_type = 'tactical'", name="ck_video_segments_usable_tactical"
@@ -211,8 +215,10 @@ def upgrade() -> None:
         sa.CheckConstraint("id ~ '^pos_[a-z0-9_]+$'", name="ck_possessions_id_pattern"),
         sa.CheckConstraint(PV_CHECK, name="ck_possessions_pv"),
         sa.CheckConstraint(f"team IN ({TEAM})", name="ck_possessions_team"),
-        sa.CheckConstraint("t_start >= 0", name="ck_possessions_tstart_ge_0"),
-        sa.CheckConstraint("t_end > t_start", name="ck_possessions_tend_gt_tstart"),
+        sa.CheckConstraint("t_start >= 0 AND t_start <> 'NaN'", name="ck_possessions_tstart_ge_0"),
+        sa.CheckConstraint(
+            "t_end > t_start AND t_end <> 'NaN'", name="ck_possessions_tend_gt_tstart"
+        ),
         sa.CheckConstraint("half IN (1, 2)", name="ck_possessions_half"),
         sa.CheckConstraint(f"outcome IN ({POSSESSION_OUTCOME})", name="ck_possessions_outcome"),
         sa.CheckConstraint(f"source IN ({POSSESSION_SOURCE})", name="ck_possessions_source"),
@@ -269,9 +275,14 @@ def upgrade() -> None:
         sa.CheckConstraint(f"type IN ({EVENT_TYPE})", name="ck_events_type"),
         sa.CheckConstraint(f"team IN ({TEAM})", name="ck_events_team"),
         sa.CheckConstraint("half IN (1, 2)", name="ck_events_half"),
-        sa.CheckConstraint("t_video >= 0", name="ck_events_tvideo_ge_0"),
-        sa.CheckConstraint("t_end IS NULL OR t_end >= t_video", name="ck_events_tend_ge_tvideo"),
-        sa.CheckConstraint("match_clock >= 0", name="ck_events_match_clock_ge_0"),
+        sa.CheckConstraint("t_video >= 0 AND t_video <> 'NaN'", name="ck_events_tvideo_ge_0"),
+        sa.CheckConstraint(
+            "t_end IS NULL OR (t_end >= t_video AND t_end <> 'NaN')",
+            name="ck_events_tend_ge_tvideo",
+        ),
+        sa.CheckConstraint(
+            "match_clock >= 0 AND match_clock <> 'NaN'", name="ck_events_match_clock_ge_0"
+        ),
         sa.CheckConstraint("confidence BETWEEN 0 AND 1", name="ck_events_conf_range"),
         sa.CheckConstraint(f"source IN ({EVENT_SOURCE})", name="ck_events_source"),
         sa.CheckConstraint(f"status IN ({EVENT_STATUS})", name="ck_events_status"),
@@ -317,8 +328,13 @@ def upgrade() -> None:
         sa.CheckConstraint(PV_CHECK, name="ck_team_metrics_pv"),
         sa.CheckConstraint(f"team IN ({TEAM})", name="ck_team_metrics_team"),
         sa.CheckConstraint("half IN (1, 2)", name="ck_team_metrics_half"),
-        sa.CheckConstraint("window_start >= 0", name="ck_team_metrics_wstart_ge_0"),
-        sa.CheckConstraint("window_end > window_start", name="ck_team_metrics_wend_gt_wstart"),
+        sa.CheckConstraint(
+            "window_start >= 0 AND window_start <> 'NaN'", name="ck_team_metrics_wstart_ge_0"
+        ),
+        sa.CheckConstraint(
+            "window_end > window_start AND window_end <> 'NaN'",
+            name="ck_team_metrics_wend_gt_wstart",
+        ),
         sa.CheckConstraint(f"metric IN ({METRIC_NAME})", name="ck_team_metrics_metric"),
         sa.CheckConstraint("coverage BETWEEN 0 AND 1", name="ck_team_metrics_cov_range"),
         sa.CheckConstraint(
@@ -432,7 +448,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("run_id", "node", name="uq_pipeline_runs_run_node"),
         sa.CheckConstraint(PV_CHECK, name="ck_pipeline_runs_pv"),
-        sa.CheckConstraint("duration_s >= 0", name="ck_pipeline_runs_duration_ge_0"),
+        sa.CheckConstraint(
+            "duration_s >= 0 AND duration_s <> 'NaN'", name="ck_pipeline_runs_duration_ge_0"
+        ),
         sa.CheckConstraint(
             "(ok = false AND error IS NOT NULL) OR (ok = true AND error IS NULL)",
             name="ck_pipeline_runs_ok_error",

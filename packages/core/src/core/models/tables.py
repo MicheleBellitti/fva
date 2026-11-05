@@ -156,8 +156,8 @@ matches = Table(
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     CheckConstraint("id ~ '^m_[a-z0-9_]{1,62}$'", name="ck_matches_id_pattern"),
     CheckConstraint(f"team_a_side IN ({_check_vals(TeamSide)})", name="ck_matches_team_a_side"),
-    CheckConstraint("duration_s > 0", name="ck_matches_duration_s"),
-    CheckConstraint("fps > 0", name="ck_matches_fps"),
+    CheckConstraint("duration_s > 0 AND duration_s <> 'NaN'", name="ck_matches_duration_s"),
+    CheckConstraint("fps > 0 AND fps <> 'NaN'", name="ck_matches_fps"),
     CheckConstraint(f"camera_type IN ({_check_vals(CameraType)})", name="ck_matches_camera_type"),
     CheckConstraint(f"status IN ({_check_vals(MatchStatus)})", name="ck_matches_status"),
     CheckConstraint(
@@ -216,8 +216,8 @@ video_segments = Table(
     Column("clock_start", _REAL, nullable=True),
     Column("clock_end", _REAL, nullable=True),
     CheckConstraint(_PV_CHECK, name="ck_video_segments_pv"),
-    CheckConstraint("t_start >= 0", name="ck_video_segments_tstart_ge_0"),
-    CheckConstraint("t_end > t_start", name="ck_video_segments_tend_gt_tstart"),
+    CheckConstraint("t_start >= 0 AND t_start <> 'NaN'", name="ck_video_segments_tstart_ge_0"),
+    CheckConstraint("t_end > t_start AND t_end <> 'NaN'", name="ck_video_segments_tend_gt_tstart"),
     CheckConstraint(f"view_type IN ({_check_vals(ViewType)})", name="ck_video_segments_view_type"),
     CheckConstraint(
         f"NOT usable OR view_type = '{ViewType.TACTICAL.value}'",
@@ -259,8 +259,8 @@ possessions = Table(
     CheckConstraint("id ~ '^pos_[a-z0-9_]+$'", name="ck_possessions_id_pattern"),
     CheckConstraint(_PV_CHECK, name="ck_possessions_pv"),
     CheckConstraint(f"team IN ({_check_vals(Team)})", name="ck_possessions_team"),
-    CheckConstraint("t_start >= 0", name="ck_possessions_tstart_ge_0"),
-    CheckConstraint("t_end > t_start", name="ck_possessions_tend_gt_tstart"),
+    CheckConstraint("t_start >= 0 AND t_start <> 'NaN'", name="ck_possessions_tstart_ge_0"),
+    CheckConstraint("t_end > t_start AND t_end <> 'NaN'", name="ck_possessions_tend_gt_tstart"),
     CheckConstraint("half IN (1, 2)", name="ck_possessions_half"),
     CheckConstraint(
         f"outcome IN ({_check_vals(PossessionOutcome)})", name="ck_possessions_outcome"
@@ -312,9 +312,12 @@ events = Table(
     CheckConstraint(f"type IN ({_check_vals(EventType)})", name="ck_events_type"),
     CheckConstraint(f"team IN ({_check_vals(Team)})", name="ck_events_team"),
     CheckConstraint("half IN (1, 2)", name="ck_events_half"),
-    CheckConstraint("t_video >= 0", name="ck_events_tvideo_ge_0"),
-    CheckConstraint("t_end IS NULL OR t_end >= t_video", name="ck_events_tend_ge_tvideo"),
-    CheckConstraint("match_clock >= 0", name="ck_events_match_clock_ge_0"),
+    CheckConstraint("t_video >= 0 AND t_video <> 'NaN'", name="ck_events_tvideo_ge_0"),
+    CheckConstraint(
+        "t_end IS NULL OR (t_end >= t_video AND t_end <> 'NaN')",
+        name="ck_events_tend_ge_tvideo",
+    ),
+    CheckConstraint("match_clock >= 0 AND match_clock <> 'NaN'", name="ck_events_match_clock_ge_0"),
     CheckConstraint("confidence BETWEEN 0 AND 1", name="ck_events_conf_range"),
     CheckConstraint(f"source IN ({_check_vals(EventSource)})", name="ck_events_source"),
     CheckConstraint(f"status IN ({_check_vals(EventStatus)})", name="ck_events_status"),
@@ -364,8 +367,13 @@ team_metrics = Table(
     CheckConstraint(_PV_CHECK, name="ck_team_metrics_pv"),
     CheckConstraint(f"team IN ({_check_vals(Team)})", name="ck_team_metrics_team"),
     CheckConstraint("half IN (1, 2)", name="ck_team_metrics_half"),
-    CheckConstraint("window_start >= 0", name="ck_team_metrics_wstart_ge_0"),
-    CheckConstraint("window_end > window_start", name="ck_team_metrics_wend_gt_wstart"),
+    CheckConstraint(
+        "window_start >= 0 AND window_start <> 'NaN'", name="ck_team_metrics_wstart_ge_0"
+    ),
+    CheckConstraint(
+        "window_end > window_start AND window_end <> 'NaN'",
+        name="ck_team_metrics_wend_gt_wstart",
+    ),
     CheckConstraint(f"metric IN ({_check_vals(MetricName)})", name="ck_team_metrics_metric"),
     CheckConstraint("coverage BETWEEN 0 AND 1", name="ck_team_metrics_cov_range"),
     CheckConstraint(
@@ -464,7 +472,9 @@ pipeline_runs = Table(
     Column("error", Text, nullable=True),
     UniqueConstraint("run_id", "node", name="uq_pipeline_runs_run_node"),
     CheckConstraint(_PV_CHECK, name="ck_pipeline_runs_pv"),
-    CheckConstraint("duration_s >= 0", name="ck_pipeline_runs_duration_ge_0"),
+    CheckConstraint(
+        "duration_s >= 0 AND duration_s <> 'NaN'", name="ck_pipeline_runs_duration_ge_0"
+    ),
     CheckConstraint(
         "(ok = false AND error IS NOT NULL) OR (ok = true AND error IS NULL)",
         name="ck_pipeline_runs_ok_error",
